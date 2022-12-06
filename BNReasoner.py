@@ -17,11 +17,32 @@ class BNReasoner:
 
     # TODO: This is where your methods should go
 
+    def find_leaf_nodes(self):
+        '''
+        A leaf node is a node without parents
+        returns: list of nodes which are leaf nodes
+        '''
+
+        leaf_nodes = []
+
+        for node in self.bn.structure.nodes:
+            parents = self.bn.get_parents(node)
+            if len(parents) == 0:
+                leaf_nodes.append(node)
+
+        return leaf_nodes
+
     def node_prune(self, Q, e):
+        '''
+        prunes all leaf nodes that are not in Q or e
+        '''
 
+        leaf_nodes = self.find_leaf_nodes()
 
+        for leaf_node in leaf_nodes:
+            if leaf_node not in Q and leaf_node not in e:
 
-        pass
+                self.bn.del_var(leaf_node)
 
     def edge_prune(self, Q, e):
         '''
@@ -31,6 +52,8 @@ class BNReasoner:
         - e: dictionary of evidence variables with truth values
         Output:
         - None
+
+        IS DEEPCOPY NEEDED?
         '''
 
         # find which edges to delete
@@ -44,6 +67,7 @@ class BNReasoner:
             self.bn.del_edge(edge) 
 
         # use bm.reduce_factor() to update the tables (not really sure how to do this)
+        # or use get_compatible_instantiation table! (someone said this in the zoom)
         
 
 
@@ -59,7 +83,8 @@ if __name__ == '__main__':
 
     # Print the interaction graph
 
-    bn.edge_prune([], 'hear-bark')
+    # bn.edge_prune([], 'hear-bark')
+    bn.node_prune([], 'hear-bark')
 
 
 
