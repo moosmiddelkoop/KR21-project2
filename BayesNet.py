@@ -85,6 +85,10 @@ class BayesNet:
         """
         return [c for c in self.structure.successors(variable)]
 
+    # MADE BY GROUP 32
+    def get_parents(self, variable: str) -> list[str]:
+        return [p for p in self.structure.predecessors(variable)]
+
     def get_cpt(self, variable: str) -> pd.DataFrame:
         """
         Returns the conditional probability table of a variable in the BN.
