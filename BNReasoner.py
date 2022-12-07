@@ -94,6 +94,15 @@ class BNReasoner:
         new_cpt = cpt.groupby(all_other_vars).max().reset_index()
         
         return new_cpt
+    
+    def multiply_factors(self, fact_1, fact_2):
+
+        common_columns = [var for var in bn.bn.get_all_variables() if var in fact_1.columns and var in fact_2.columns]
+        new_cpt = pd.merge(fact_1, fact_2, on = common_columns, how='outer')
+        new_cpt['p'] = new_cpt['p_x'] * new_cpt['p_y']
+        new_cpt.drop(['p_x', 'p_y'], axis=1, inplace=True)
+        
+        return new_cpt
 
 
 
@@ -105,6 +114,8 @@ if __name__ == '__main__':
 
     # bn.edge_prune([], 'hear-bark')
     bn.node_prune([], 'hear-bark')
+
+
 
 
 
