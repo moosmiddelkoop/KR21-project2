@@ -1,5 +1,6 @@
 from typing import Union
 from BayesNet import BayesNet
+import pandas as pd
 
 
 class BNReasoner:
