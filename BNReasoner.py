@@ -32,6 +32,7 @@ class BNReasoner:
 
         return leaf_nodes
 
+
     def node_prune(self, Q, e):
         '''
         prunes all leaf nodes that are not in Q or e
@@ -43,6 +44,7 @@ class BNReasoner:
             if leaf_node not in Q and leaf_node not in e:
 
                 self.bn.del_var(leaf_node)
+
 
     def edge_prune(self, Q, e):
         '''
@@ -70,11 +72,29 @@ class BNReasoner:
         # or use get_compatible_instantiation table! (someone said this in the zoom)
         
 
-
     def network_pruning(self, Q, e):
 
         self.edge_prune(Q, e)
         self.node_prune(Q, e)
+
+
+    def sum_out(self, X):
+        
+        cpt = self.bn.get_cpt(X)
+        all_other_vars = [v for v in cpt.columns if v not in ['p', X]]
+        new_cpt = cpt.groupby(all_other_vars).sum().reset_index()[all_other_vars + ['p']]
+        
+        return new_cpt
+
+
+    def max_out(self, X):
+            
+        cpt = self.bn.get_cpt(X)
+        all_other_vars = [v for v in cpt.columns if v not in ['p', X]] 
+        new_cpt = cpt.groupby(all_other_vars).max().reset_index()
+        
+        return new_cpt
+
 
 
 if __name__ == '__main__':
