@@ -35,6 +35,7 @@ class BNReasoner:
 
         return leaf_nodes
 
+
     def node_prune(self, Q, e):
         '''
         prunes all leaf nodes that are not in Q or e
@@ -47,6 +48,7 @@ class BNReasoner:
             if leaf_node not in Q and leaf_node not in e:
 
                 self.bn.del_var(leaf_node)
+
 
     def edge_prune(self, Q, e):
         '''
@@ -81,6 +83,34 @@ class BNReasoner:
         self.node_prune(Q, e)
 
 
+    def sum_out(self, X):
+        
+        cpt = self.bn.get_cpt(X)
+        all_other_vars = [v for v in cpt.columns if v not in ['p', X]]
+        new_cpt = cpt.groupby(all_other_vars).sum().reset_index()[all_other_vars + ['p']]
+        
+        return new_cpt
+
+
+    def max_out(self, X):
+            
+        cpt = self.bn.get_cpt(X)
+        all_other_vars = [v for v in cpt.columns if v not in ['p', X]] 
+        new_cpt = cpt.groupby(all_other_vars).max().reset_index()
+        
+        return new_cpt
+    
+    def multiply_factors(self, fact_1, fact_2):
+
+        common_columns = [var for var in bn.bn.get_all_variables() if var in fact_1.columns and var in fact_2.columns]
+        new_cpt = pd.merge(fact_1, fact_2, on = common_columns, how='outer')
+        new_cpt['p'] = new_cpt['p_x'] * new_cpt['p_y']
+        new_cpt.drop(['p_x', 'p_y'], axis=1, inplace=True)
+        
+        return new_cpt
+
+
+
 if __name__ == '__main__':
     # Load the BN from the BIFXML file
     Reasoner = BNReasoner('testing/dog_problem.bifxml')
@@ -89,6 +119,8 @@ if __name__ == '__main__':
     Reasoner.bn.draw_structure()
     Reasoner.network_pruning(['hear-bark'], {'dog-out': True})
     Reasoner.bn.draw_structure()
+
+
 
 
 
