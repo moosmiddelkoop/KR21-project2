@@ -211,8 +211,8 @@ class BNReasoner:
     def ordering(self, x, strategy=None):
         '''
         Given a set of variables X in the Bayesian network, computes a good ordering for the elimination of X based on:
-         - the min-degree heuristics (degree: how many edges the node has)
-         - the min-fill heuristics (order based on least amount of edges that have to be added to keep nodes connected)
+         - the min-degree heuristics (degree: how many edges the node has in the interaction graph)
+         - the min-fill heuristics (order based on least amount of edges that have to be added to keep nodes connected in the interaction graph)
 
         input: x - set of variables
         strategy: 'min-degree' or 'min-fill'
@@ -221,13 +221,15 @@ class BNReasoner:
         '''
 
         order = []
+        int_graph = self.bn.get_interaction_graph()
 
         if strategy == 'min-degree':
 
             # get degrees
             degree_dict = {}
+           
             for var in x:
-                degree = len(self.bn.get_children(var) + self.bn.get_parents(var))
+                degree = len([c[0] if c[0] != var else c[1] for c in int_graph.edges if var in c])
                 degree_dict[var] = degree
 
             # return ordering, sort dict by values and create list of sorted keys
@@ -239,8 +241,21 @@ class BNReasoner:
 
             fill_dict = {}
             for var in x:
-                #TODO: not finished yet
-                bn_copy = deepcopy(self.bn)
+                
+                # Extract neighbor nodes from the interaction graph
+                node_list = [c[0] if c[0] != var else c[1] for c in int_graph.edges if var in c]
+                
+                # Iterate over nodes
+                needed_edges = 0
+                for node_1 in node_list:
+                    for node_2 in node_list:
+                        if node_2 != node_1:
+                            edge = (node_1, node_2)
+                            if edge not in int_graph.edges: # For all connected node pairs, check if they are connected already
+                                needed_edges += 1 # If not, add 1
+                    node_list.remove(node_1) # Remove checked node to avoid double counting
+                
+                fill_dict[var] = needed_edges
 
             order = [k for k, v in sorted(fill_dict.items(), key=lambda item: item[1])]
 
@@ -248,7 +263,6 @@ class BNReasoner:
 
         else:
             raise Exception('Please specify a ordering strategy, either min-degree or min-fill')
-
 
 
 if __name__ == '__main__':
