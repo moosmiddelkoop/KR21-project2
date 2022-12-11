@@ -1,8 +1,8 @@
 from typing import Union
 from BayesNet import BayesNet
 import pandas as pd
-import time
 import helper
+from copy import deepcopy
 
 
 class BNReasoner:
@@ -121,31 +121,6 @@ class BNReasoner:
         self.edge_prune(Q, e)
         self.node_prune(Q, e)
 
-    def sum_out(self, X):
-        
-        cpt = self.bn.get_cpt(X)
-        all_other_vars = [v for v in cpt.columns if v not in ['p', X]]
-        new_cpt = cpt.groupby(all_other_vars).sum().reset_index()[all_other_vars + ['p']]
-        
-        return new_cpt
-
-    def max_out(self, X):
-            
-        cpt = self.bn.get_cpt(X)
-        all_other_vars = [v for v in cpt.columns if v not in ['p', X]] 
-        new_cpt = cpt.groupby(all_other_vars).max().reset_index()
-        
-        return new_cpt
-    
-    def multiply_factors(self, fact_1, fact_2):
-
-        common_columns = [var for var in bn.bn.get_all_variables() if var in fact_1.columns and var in fact_2.columns]
-        new_cpt = pd.merge(fact_1, fact_2, on = common_columns, how='outer')
-        new_cpt['p'] = new_cpt['p_x'] * new_cpt['p_y']
-        new_cpt.drop(['p_x', 'p_y'], axis=1, inplace=True)
-        
-        return new_cpt
-
     def d_seperation(self, x: set, y: set, z: set) -> bool:
         '''
         if all paths from x to y are blocked by z, then x and y are d-separated
@@ -208,6 +183,72 @@ class BNReasoner:
         # IS THIS ALL?!
         return self.d_seperation(x, y, z)
 
+    def sum_out(self, X):
+        
+        cpt = self.bn.get_cpt(X)
+        all_other_vars = [v for v in cpt.columns if v not in ['p', X]]
+        new_cpt = cpt.groupby(all_other_vars).sum().reset_index()[all_other_vars + ['p']]
+        
+        return new_cpt
+
+    def max_out(self, X):
+            
+        cpt = self.bn.get_cpt(X)
+        all_other_vars = [v for v in cpt.columns if v not in ['p', X]] 
+        new_cpt = cpt.groupby(all_other_vars).max().reset_index()
+        
+        return new_cpt
+    
+    def multiply_factors(self, fact_1, fact_2):
+
+        common_columns = [var for var in bn.bn.get_all_variables() if var in fact_1.columns and var in fact_2.columns]
+        new_cpt = pd.merge(fact_1, fact_2, on = common_columns, how='outer')
+        new_cpt['p'] = new_cpt['p_x'] * new_cpt['p_y']
+        new_cpt.drop(['p_x', 'p_y'], axis=1, inplace=True)
+        
+        return new_cpt
+
+    def ordering(self, x, strategy=None):
+        '''
+        Given a set of variables X in the Bayesian network, computes a good ordering for the elimination of X based on:
+         - the min-degree heuristics (degree: how many edges the node has)
+         - the min-fill heuristics (order based on least amount of edges that have to be added to keep nodes connected)
+
+        input: x - set of variables
+        strategy: 'min-degree' or 'min-fill'
+
+        returns: list of ordering of those variables
+        '''
+
+        order = []
+
+        if strategy == 'min-degree':
+
+            # get degrees
+            degree_dict = {}
+            for var in x:
+                degree = len(self.bn.get_children(var) + self.bn.get_parents(var))
+                degree_dict[var] = degree
+
+            # return ordering, sort dict by values and create list of sorted keys
+            order = [k for k, v in sorted(degree_dict.items(), key=lambda item: item[1])]
+
+            return order
+
+        elif strategy == 'min-fill':
+
+            fill_dict = {}
+            for var in x:
+                #TODO: not finished yet
+                bn_copy = deepcopy(self.bn)
+
+            order = [k for k, v in sorted(fill_dict.items(), key=lambda item: item[1])]
+
+            return order
+
+        else:
+            raise Exception('Please specify a ordering strategy, either min-degree or min-fill')
+
 
 
 if __name__ == '__main__':
@@ -216,7 +257,8 @@ if __name__ == '__main__':
     # Reasoner.bn.draw_structure()
 
     # test is_connected()
-    helper.test_function(Reasoner.d_seperation({'bowel-problem'}, {'family-out'}, {'light-on'}))
+    # helper.test_function(Reasoner.d_seperation({'bowel-problem'}, {'family-out'}, {'light-on'}))
+    helper.test_function(Reasoner.ordering({'dog-out', 'family-out', 'light-on'}, strategy='min-degree'))
     
 
 
