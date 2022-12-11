@@ -1,6 +1,8 @@
 from typing import Union
 from BayesNet import BayesNet
 import pandas as pd
+import time
+import helper
 
 
 class BNReasoner:
@@ -16,7 +18,7 @@ class BNReasoner:
         else:
             self.bn = net
 
-    # TODO: This is where your methods should go
+    # UTIL FUNCTIONS ----------------------------------------------------------------------------------------------------
 
     def find_leaf_nodes(self):
         '''
@@ -35,6 +37,42 @@ class BNReasoner:
 
         return leaf_nodes
 
+    def is_connected(self, start, end):
+        '''
+        BFS to find if there is a path from start to end
+        returns true if nodes start and end are connected
+        goes through all connections of all nodes and terminates as soon as a node == endnode. If this never happens before the queue is empty,
+        this means that there is no conection
+
+        input: two nodes: start and end
+        output: boolean
+        '''
+
+        # initialize queue and visited list
+        visited= []
+        queue = []
+        queue.append(start)
+
+        while queue:
+
+            n = queue.pop(0)
+
+            if n == end:
+                return True
+
+            if n not in visited:
+                visited.append(n)
+                neighbours = self.bn.get_children(n) + self.bn.get_parents(n)
+
+                # add neighbours to queue
+                # no list comprehension bc that would just create an unneccesary list
+                for neighbour in neighbours:
+                    queue.append(neighbour)
+
+        # if graph is exhausted, and no connections were found, return False
+        return False
+        
+    # ALGORITHM FUNCTIONS -----------------------------------------------------------------------------------------------
 
     def node_prune(self, Q, e):
         '''
@@ -76,12 +114,12 @@ class BNReasoner:
 
         # use bm.reduce_factor() to update the tables (not really sure how to do this)
         # or use get_compatible_instantiation table! (someone said this in the zoom)        
+        # evidence for tables in which evidence is the given variable
 
     def network_pruning(self, Q, e):
 
         self.edge_prune(Q, e)
         self.node_prune(Q, e)
-
 
     def sum_out(self, X):
         
@@ -90,7 +128,6 @@ class BNReasoner:
         new_cpt = cpt.groupby(all_other_vars).sum().reset_index()[all_other_vars + ['p']]
         
         return new_cpt
-
 
     def max_out(self, X):
             
@@ -109,18 +146,77 @@ class BNReasoner:
         
         return new_cpt
 
+    def d_seperation(self, x: set, y: set, z: set) -> bool:
+        '''
+        if all paths from x to y are blocked by z, then x and y are d-separated
+        if there is a path from x to y that is not blocked by z, then x and y are not d-separated
+        Paths between sets of nodes can be exponentially many. By using pruning, d-seperation can be computed in linear time.
+        '''
+
+        # do until no new nodes or edges can be deleted:
+        while True:
+
+            no_changes = 0
+
+            # delete every leaf node, except those in x, y, or z
+            old_nodes = self.bn.get_all_variables()
+
+            leaf_nodes = self.find_leaf_nodes()
+            [self.bn.del_var(leaf_node) for leaf_node in leaf_nodes if leaf_node not in x and leaf_node not in y and leaf_node not in z]
+            new_nodes = self.bn.get_all_variables()
+
+            # no nodes deleted
+            if old_nodes == new_nodes:
+                no_changes += 1
+
+            # delete all outgoing edges from nodes in z
+            edges_deleted = 0
+            for node in z:
+                children = self.bn.get_children(node)
+                edges_deleted += len(children)
+                for child in children:
+                    self.bn.del_edge((node, child))
+            
+            if edges_deleted == 0:
+                no_changes += 1
+
+            if no_changes >= 2:
+                break
+
+        # if there is a path from x to y that is not blocked by z, then x and y are not d-separated
+        # d-seperated iff all possible connections don't have a path
+        # return False as soon as a connection is found
+        for var_x in x:
+            for var_y in y:
+                if self.is_connected(var_x, var_y):
+                    return False
+
+        # otherwise return True
+        return True
+
+    def indepencence(self, x, y, z):    
+        '''
+        Given three sets of variables x, y, and z, determine wether x and y are independent given z
+        input:
+        x: set of vars
+        y: set of vars
+        z: set of vars
+        output: 
+        bool
+        '''
+
+        # IS THIS ALL?!
+        return self.d_seperation(x, y, z)
+
 
 
 if __name__ == '__main__':
     # Load the BN from the BIFXML file
     Reasoner = BNReasoner('testing/dog_problem.bifxml')
+    # Reasoner.bn.draw_structure()
 
-    # Print the interaction graph
-    Reasoner.bn.draw_structure()
-    Reasoner.network_pruning(['hear-bark'], {'dog-out': True})
-    Reasoner.bn.draw_structure()
-
-
-
+    # test is_connected()
+    helper.test_function(Reasoner.d_seperation({'bowel-problem'}, {'family-out'}, {'light-on'}))
+    
 
 
