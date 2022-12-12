@@ -229,6 +229,7 @@ class BNReasoner:
             degree_dict = {}
            
             for var in x:
+
                 degree = len([c[0] if c[0] != var else c[1] for c in int_graph.edges if var in c])
                 degree_dict[var] = degree
 
@@ -263,6 +264,15 @@ class BNReasoner:
 
         else:
             raise Exception('Please specify a ordering strategy, either min-degree or min-fill')
+
+    def var_elimination(self, x, ordering_strat='min-degree'):
+        '''
+        given a set of variables x, eliminate variables in the right order
+        optional input: ordering strategy: 'min-degree' or 'min-fill'. Standard: 'min-degree'
+        '''
+
+        # get ordering
+        order = self.ordering(x, strategy=ordering_strat)
 
 
 if __name__ == '__main__':
