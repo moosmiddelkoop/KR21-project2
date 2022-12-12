@@ -87,6 +87,11 @@ class BayesNet:
 
     # MADE BY GROUP 32
     def get_parents(self, variable: str) -> List[str]:
+        """
+        Returns the parents of the variable in the graph.
+        :param variable: Variable to get the parents from
+        :return: List of parents
+        """
         return [p for p in self.structure.predecessors(variable)]
 
     def get_cpt(self, variable: str) -> pd.DataFrame:
