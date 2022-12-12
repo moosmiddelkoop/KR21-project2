@@ -2,7 +2,9 @@ from typing import Union
 from BayesNet import BayesNet
 import pandas as pd
 import helper
-from copy import deepcopy
+
+import networkx as nx
+import matplotlib.pyplot as plt
 
 
 class BNReasoner:
@@ -24,8 +26,6 @@ class BNReasoner:
         '''
         A leaf node is a node without children
         returns: list of nodes which are leaf nodes
-
-        DOESNT WORK
         '''
 
         leaf_nodes = []
@@ -185,6 +185,13 @@ class BNReasoner:
 
     def sum_out(self, X):
         
+        """Given variable X, return the CPT of X summed out.
+        Input:
+            X: string indicating the variable to be summed out.
+        Returns:
+            Pandas DataFrame: The CPT summed out by X.
+        """
+        
         cpt = self.bn.get_cpt(X)
         all_other_vars = [v for v in cpt.columns if v not in ['p', X]]
         new_cpt = cpt.groupby(all_other_vars).sum().reset_index()[all_other_vars + ['p']]
@@ -192,16 +199,35 @@ class BNReasoner:
         return new_cpt
 
     def max_out(self, X):
+        
+        """Given variable X (as string), return the maxed-out CPT by X, along with the value of X for which the CPT is maxed out.
+        Input:
+            X: string indicating the variable to be maxed out.
+        Returns:
+            Pandas DataFrame: The CPT summed out by X.
+            Bool: The value of X for which the CPT has the max probability.
+        """
             
         cpt = self.bn.get_cpt(X)
         all_other_vars = [v for v in cpt.columns if v not in ['p', X]] 
         new_cpt = cpt.groupby(all_other_vars).max().reset_index()
-        
-        return new_cpt
+        max_instantiation = new_cpt[X].iloc[0]
+        new_cpt = new_cpt[all_other_vars + ['p']]
+        return new_cpt, max_instantiation
+    
     
     def multiply_factors(self, fact_1, fact_2):
+        
+        """
+        Given two factors (as CPTs (Pandas Data Frames)), return the outer product of the two factors with new probabilities (probs of the single factors multiplied).
+        Input:
+            fact_1: First factor (CPT / Pandas DataFrame)
+            fact_2: Second factor (CPT / Pandas DataFrame)
+        Returns:
+            new_cpt: CPT which displays the outer product of the two factors where the probabilities of the single factors are multiplied.
+        """
 
-        common_columns = [var for var in bn.bn.get_all_variables() if var in fact_1.columns and var in fact_2.columns]
+        common_columns = [var for var in self.bn.get_all_variables() if var in fact_1.columns and var in fact_2.columns]
         new_cpt = pd.merge(fact_1, fact_2, on = common_columns, how='outer')
         new_cpt['p'] = new_cpt['p_x'] * new_cpt['p_y']
         new_cpt.drop(['p_x', 'p_y'], axis=1, inplace=True)
@@ -220,8 +246,7 @@ class BNReasoner:
         returns: list of ordering of those variables
         '''
 
-        order = []
-        int_graph = self.bn.get_interaction_graph()
+        int_graph = self.bn.get_interaction_graph() # get interaction graph
 
         if strategy == 'min-degree':
 
@@ -250,15 +275,15 @@ class BNReasoner:
                 needed_edges = 0
                 for node_1 in node_list:
                     for node_2 in node_list:
-                        if node_2 != node_1:
-                            edge = (node_1, node_2)
+                        if node_2 != node_1: # Exlude self-loops
+                            edge = (node_1, node_2) 
                             if edge not in int_graph.edges: # For all connected node pairs, check if they are connected already
                                 needed_edges += 1 # If not, add 1
                     node_list.remove(node_1) # Remove checked node to avoid double counting
                 
-                fill_dict[var] = needed_edges
+                fill_dict[var] = needed_edges 
 
-            order = [k for k, v in sorted(fill_dict.items(), key=lambda item: item[1])]
+            order = [k for k, v in sorted(fill_dict.items(), key=lambda item: item[1])] # Sort based on number of needed edges
 
             return order
 
@@ -275,14 +300,69 @@ class BNReasoner:
         order = self.ordering(x, strategy=ordering_strat)
 
 
+    def mep(self, evidence, strategy="min-fill"):
+        
+        """
+        Given some evidence, return the instantiation that is most probable.
+        
+        Input:
+            evidence: Dictionary with variable names as keys and truth values as values.
+            strategy: Strategy to order the variables by; "min-fill" or "min-degree".
+        Returns:
+            instantiation: A dictionary with all variable names as keys and the truth values for which the probability is maximized.
+            probability: The probability of the instantiation.
+        """
+        
+        # Frist: Pruning based on evidence
+        cpt_dict = {}
+        for var in self.bn.get_all_variables():
+            cpt = self.bn.get_cpt(var)
+            
+            # Pruning based on evidence
+            for ev in evidence.keys():
+                if ev in cpt.columns:
+                    cpt = cpt[cpt[ev] == evidence[ev]]   
+                             
+            cpt_dict[var] = cpt
+        
+        # No particular order applied here; Could be improved
+        order = Reasoner.bn.get_all_variables()
+
+        # Multiply all CPTs
+        for i, var in enumerate(order):
+            if i == 0:
+                running_cpt = cpt_dict[var]
+            else:
+                running_cpt = self.multiply_factors(running_cpt, cpt_dict[var])
+        
+        # Extract that instantiation for which the combined probability is maximized
+        instantiation = running_cpt[running_cpt["p"] == max(running_cpt["p"])][Reasoner.bn.get_all_variables()].to_dict('records')[0]
+            
+        return instantiation, max(running_cpt["p"])
+    
+    
+    def map(self, Q, evidence, strategy="min-fill"):
+        
+        ### TBD ###
+        
+        return None 
+
 if __name__ == '__main__':
     # Load the BN from the BIFXML file
-    Reasoner = BNReasoner('testing/dog_problem.bifxml')
+    reasoner = BNReasoner('testing/dog_problem.bifxml')
     # Reasoner.bn.draw_structure()
+
+    net = reasoner.bn
+
+    net.draw_structure()
+    plt.show()
+
+    nx.draw(net.get_interaction_graph(), with_labels=True)
+    plt.show()
+
+
 
     # test is_connected()
     # helper.test_function(Reasoner.d_seperation({'bowel-problem'}, {'family-out'}, {'light-on'}))
     helper.test_function(Reasoner.ordering({'dog-out', 'family-out', 'light-on'}, strategy='min-degree'))
     
-
-
