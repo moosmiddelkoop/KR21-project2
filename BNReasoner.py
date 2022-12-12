@@ -2,7 +2,9 @@ from typing import Union
 from BayesNet import BayesNet
 import pandas as pd
 import helper
-from copy import deepcopy
+
+import networkx as nx
+import matplotlib.pyplot as plt
 
 
 class BNReasoner:
@@ -24,8 +26,6 @@ class BNReasoner:
         '''
         A leaf node is a node without children
         returns: list of nodes which are leaf nodes
-
-        DOESNT WORK
         '''
 
         leaf_nodes = []
@@ -339,8 +339,18 @@ class BNReasoner:
 
 if __name__ == '__main__':
     # Load the BN from the BIFXML file
-    Reasoner = BNReasoner('testing/dog_problem.bifxml')
+    reasoner = BNReasoner('testing/dog_problem.bifxml')
     # Reasoner.bn.draw_structure()
+
+    net = reasoner.bn
+
+    net.draw_structure()
+    plt.show()
+
+    nx.draw(net.get_interaction_graph(), with_labels=True)
+    plt.show()
+
+
 
     # test is_connected()
     # helper.test_function(Reasoner.d_seperation({'bowel-problem'}, {'family-out'}, {'light-on'}))
