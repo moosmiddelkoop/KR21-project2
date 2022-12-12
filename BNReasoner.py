@@ -71,6 +71,25 @@ class BNReasoner:
 
         # if graph is exhausted, and no connections were found, return False
         return False
+
+    def find_cpts_per_var(self):
+        '''
+        returns a dictionary with for each var, a set of the names of all cpts that contain the var
+        '''
+
+        # for each var, find which cpts it is in
+        cpt_per_var = {}
+        all_cpts = self.bn.get_all_cpts()
+        for key, cpt in all_cpts.items():
+            for column in cpt:
+                if column == 'p':
+                    continue
+                if column not in cpt_per_var:
+                    cpt_per_var[column] = {key}
+                else:
+                    cpt_per_var[column].add(key)
+
+        return cpt_per_var
         
     # ALGORITHM FUNCTIONS -----------------------------------------------------------------------------------------------
 
@@ -183,16 +202,20 @@ class BNReasoner:
         # IS THIS ALL?!
         return self.d_seperation(x, y, z)
 
-    def sum_out(self, X):
+    def sum_out(self, factor, X):
         
-        """Given variable X, return the CPT of X summed out.
+        """
+        Given a factor and variable X, return the CPT of X summed out.
         Input:
             X: string indicating the variable to be summed out.
         Returns:
             Pandas DataFrame: The CPT summed out by X.
         """
         
-        cpt = self.bn.get_cpt(X)
+        cpt = factor
+        if X not in cpt.columns:
+            raise ValueError("Variable not in CPT")
+
         all_other_vars = [v for v in cpt.columns if v not in ['p', X]]
         new_cpt = cpt.groupby(all_other_vars).sum().reset_index()[all_other_vars + ['p']]
         
@@ -290,14 +313,36 @@ class BNReasoner:
         else:
             raise Exception('Please specify a ordering strategy, either min-degree or min-fill')
 
+    
     def var_elimination(self, x, ordering_strat='min-degree'):
         '''
         given a set of variables x, eliminate variables in the right order
         optional input: ordering strategy: 'min-degree' or 'min-fill'. Standard: 'min-degree'
+        returns: resulting factor
         '''
+
+        cpt_per_var = self.find_cpts_per_var()
 
         # get ordering
         order = self.ordering(x, strategy=ordering_strat)
+
+        for i, var in enumerate(order):
+
+            # get multiplication factor (multiply all factors containing the variable)
+            cpts_to_combine = [self.bn.get_cpt(v) for v in cpt_per_var[var]]
+
+            # after the first iteration, there is a summed out factor already from last iteration. add it to the list of factors to combine
+            if i != 0:
+                cpts_to_combine.append(summed_out)
+
+            multiplication_factor = cpts_to_combine[0]
+            for i in range(1, len(cpts_to_combine)):
+                multiplication_factor = self.multiply_factors(multiplication_factor, cpts_to_combine[i])
+
+            # sum out variable
+            summed_out = self.sum_out(multiplication_factor, var)
+
+        return summed_out
 
 
     def mep(self, evidence, strategy="min-fill"):
@@ -340,7 +385,6 @@ class BNReasoner:
             
         return instantiation, max(running_cpt["p"])
     
-    
     def map(self, Q, evidence, strategy="min-fill"):
         
         ### TBD ###
@@ -349,20 +393,7 @@ class BNReasoner:
 
 if __name__ == '__main__':
     # Load the BN from the BIFXML file
-    reasoner = BNReasoner('testing/dog_problem.bifxml')
+    Reasoner = BNReasoner('testing/dog_problem.bifxml')
     # Reasoner.bn.draw_structure()
 
-    net = reasoner.bn
-
-    net.draw_structure()
-    plt.show()
-
-    nx.draw(net.get_interaction_graph(), with_labels=True)
-    plt.show()
-
-
-
-    # test is_connected()
-    # helper.test_function(Reasoner.d_seperation({'bowel-problem'}, {'family-out'}, {'light-on'}))
-    helper.test_function(Reasoner.ordering({'dog-out', 'family-out', 'light-on'}, strategy='min-degree'))
-    
+    Reasoner.var_elimination({'family-out', 'light-on'})
