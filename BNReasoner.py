@@ -73,44 +73,31 @@ class BNReasoner:
         # if graph is exhausted, and no connections were found, return False
         return False
 
-    def find_cpts_per_var(self):
+    def find_cpts_for_var(self, var):
         '''
-        returns a dictionary with for each var, a set of the names of all cpts that contain the var
+        returns a list of all cpts that contain the var
         '''
+        cpts_per_var = {var: self.bn.get_cpt(var)}
+        for child in self.bn.get_children(var):
+            cpts_per_var[child] = self.bn.get_cpt(child)
 
-        # for each var, find which cpts it is in
-        cpt_per_var = {}
-        all_cpts = self.bn.get_all_cpts()
-        for key, cpt in all_cpts.items():
-            for column in cpt:
-                if column == 'p':
-                    continue
-                if column not in cpt_per_var:
-                    cpt_per_var[column] = {key}
-                else:
-                    cpt_per_var[column].add(key)
+        return cpts_per_var
 
-        return cpt_per_var
-     
     def set_evidence(self, evidence):
         '''
         given a pd.Series of evidence, set the evidence in the BN, return updated CPTs
         '''
-        updated_cpts = {}
-        cpts = self.bn.get_all_cpts()
+        # get all cpts that contain evidence
+        cpts = {}
+        for var in evidence.index:
+            cpts.update(self.find_cpts_for_var(var))
+
+        # set evidence for cpts
         for var, cpt in cpts.items():
-            # reduce factor
-            new_cpt = self.bn.reduce_factor(evidence, cpt)
-
-            # remove zero rows (effecitvely summing out the evidence, but keeping variables for multiplication)
-            new_cpt = new_cpt[new_cpt['p'] != 0].reset_index(drop=True)
-
-            # update cpt in BN
+            new_cpt = self.bn.get_compatible_instantiations_table(evidence, cpt)
             self.bn.update_cpt(var, new_cpt)
-            # add to updated_cpts for return
-            updated_cpts[var] = new_cpt
 
-        return updated_cpts
+        return cpts
 
         
     # ALGORITHM FUNCTIONS -----------------------------------------------------------------------------------------------
@@ -355,15 +342,13 @@ class BNReasoner:
         returns: resulting factor
         '''
 
-        cpt_per_var = self.find_cpts_per_var()
-
         # get ordering
         order = self.ordering(x, strategy=ordering_strat)
 
         for i, var in enumerate(order):
 
             # get multiplication factor (multiply all factors containing the variable)
-            cpts_to_combine = [self.bn.get_cpt(v) for v in cpt_per_var[var]]
+            cpts_to_combine = list(self.find_cpts_for_var(var).values())
 
             # after the first iteration, there is a summed out factor already from last iteration. add it to the list of factors to combine
             if i != 0:
@@ -387,16 +372,16 @@ class BNReasoner:
         Returns:
             marginal_distribution: A dictionary with the query variable names as keys and the corresponding marginal distributions as values.
         """
-        # prune BN based on evidence
-        self.network_pruning(query, evidence)
-
         # set evidence
         self.set_evidence(evidence)
 
-        # eliminate query variables
-        summed_out = self.var_elimination(query)
+        # prune BN based on evidence
+        self.network_pruning(query, evidence)
 
-        return self.bn.get_all_cpts()
+        # eliminate query variables
+        self.var_elimination(query)
+
+        return {var: self.bn.get_cpt(var) for var in query}
 
 
     def mep(self, evidence, strategy="min-fill"):
@@ -448,16 +433,13 @@ class BNReasoner:
 if __name__ == '__main__':
     # Load the BN from the BIFXML file
     Reasoner = BNReasoner('testing\lecture_example.BIFXML')
-    #Reasoner.bn.draw_structure()
+    Reasoner.bn.draw_structure()
 
     query=["Slippery Road?"]
     evidence=pd.Series({"Rain?": True})
 
-    Reasoner.network_pruning(query, evidence)
-
-    Reasoner.bn.draw_structure()
-
     result = Reasoner.marginal_distributions(query, evidence)
+
     for var, cpt in result.items():
         print(var)
         print(cpt)
