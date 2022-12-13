@@ -1,4 +1,5 @@
-from typing import Union
+from typing import List, Tuple, Dict, Union
+
 from BayesNet import BayesNet
 import pandas as pd
 import helper
@@ -90,21 +91,46 @@ class BNReasoner:
                     cpt_per_var[column].add(key)
 
         return cpt_per_var
+     
+    def set_evidence(self, evidence):
+        '''
+        given a pd.Series of evidence, set the evidence in the BN, return updated CPTs
+        '''
+        updated_cpts = {}
+        cpts = self.bn.get_all_cpts()
+        for var, cpt in cpts.items():
+            # reduce factor
+            new_cpt = self.bn.reduce_factor(evidence, cpt)
+
+            # remove zero rows (effecitvely summing out the evidence, but keeping variables for multiplication)
+            new_cpt = new_cpt[new_cpt['p'] != 0].reset_index(drop=True)
+
+            # update cpt in BN
+            self.bn.update_cpt(var, new_cpt)
+            # add to updated_cpts for return
+            updated_cpts[var] = new_cpt
+
+        return updated_cpts
+
         
     # ALGORITHM FUNCTIONS -----------------------------------------------------------------------------------------------
 
     def node_prune(self, Q, e):
         '''
         prunes all leaf nodes that are not in Q or e
+
+        Return deleted nodes
         '''
 
         leaf_nodes = self.find_leaf_nodes()
-        print(leaf_nodes)
-
+        removed = []
         for leaf_node in leaf_nodes:
             if leaf_node not in Q and leaf_node not in e:
 
                 self.bn.del_var(leaf_node)
+                removed.append(leaf_node)
+        
+        return removed
 
 
     def edge_prune(self, Q, e):
@@ -114,31 +140,34 @@ class BNReasoner:
         - Q: list of query variables
         - e: dictionary of evidence variables with truth values
         Output:
-        - None
+        - Removed edges
 
         WORKS EXCEPT TABLES NEED TO BE UPDATED STILL
         '''
-        
-        variables_in_evidence = list(e.keys())
 
         # find which edges to delete
         edges_to_delete = []
         for edge in self.bn.structure.edges:
-            if edge[0] in variables_in_evidence:
+            if edge[0] in e:
                 edges_to_delete.append(edge)
         
         # do it in two steps to avoid changing the structure while iterating
         for edge in edges_to_delete:
-            self.bn.del_edge(edge) 
+            self.bn.del_edge(edge)
 
-        # use bm.reduce_factor() to update the tables (not really sure how to do this)
+        return edges_to_delete
+
+        # use bn.reduce_factor() to update the tables (not really sure how to do this)
         # or use get_compatible_instantiation table! (someone said this in the zoom)        
         # evidence for tables in which evidence is the given variable
 
     def network_pruning(self, Q, e):
-
-        self.edge_prune(Q, e)
-        self.node_prune(Q, e)
+        """
+        Prunes the network, given query variables Q and evidence e
+        """
+        # do until no new nodes or edges can be deleted:
+        while self.edge_prune(Q, e) + self.node_prune(Q, e) != []:
+            pass
 
     def d_seperation(self, x: set, y: set, z: set) -> bool:
         '''
@@ -207,10 +236,15 @@ class BNReasoner:
         """
         Given a factor and variable X, return the CPT of X summed out.
         Input:
+            factor: Pandas DataFrame representing the CPT of a factor.
             X: string indicating the variable to be summed out.
         Returns:
             Pandas DataFrame: The CPT summed out by X.
         """
+        # edge case where you some out over the whole factor
+        if len(factor.columns) == 2:
+            # remove the row where p = 0, this leaves a single line CPT with the set value (T/F) for the variable
+            return factor[factor['p'] != 0].reset_index(drop=True)
         
         cpt = factor
         if X not in cpt.columns:
@@ -344,6 +378,26 @@ class BNReasoner:
 
         return summed_out
 
+    def marginal_distributions(self, query: List[str], evidence: pd.Series) -> List[str]:
+        """
+        Given a query and evidence, return the marginal distribution of the query variables.
+        Input:
+            query: List of variable names.
+            evidence: a series of assignments as tuples. E.g.: pd.Series({"A": True, "B": False})
+        Returns:
+            marginal_distribution: A dictionary with the query variable names as keys and the corresponding marginal distributions as values.
+        """
+        # prune BN based on evidence
+        self.network_pruning(query, evidence)
+
+        # set evidence
+        self.set_evidence(evidence)
+
+        # eliminate query variables
+        summed_out = self.var_elimination(query)
+
+        return self.bn.get_all_cpts()
+
 
     def mep(self, evidence, strategy="min-fill"):
         
@@ -393,7 +447,17 @@ class BNReasoner:
 
 if __name__ == '__main__':
     # Load the BN from the BIFXML file
-    Reasoner = BNReasoner('testing/dog_problem.bifxml')
-    # Reasoner.bn.draw_structure()
+    Reasoner = BNReasoner('testing\lecture_example.BIFXML')
+    #Reasoner.bn.draw_structure()
 
-    Reasoner.var_elimination({'family-out', 'light-on'})
+    query=["Slippery Road?"]
+    evidence=pd.Series({"Rain?": True})
+
+    Reasoner.network_pruning(query, evidence)
+
+    Reasoner.bn.draw_structure()
+
+    result = Reasoner.marginal_distributions(query, evidence)
+    for var, cpt in result.items():
+        print(var)
+        print(cpt)
