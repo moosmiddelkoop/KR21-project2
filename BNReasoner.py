@@ -355,8 +355,8 @@ class BNReasoner:
                 cpts_to_combine.append(summed_out)
 
             multiplication_factor = cpts_to_combine[0]
-            for i in range(1, len(cpts_to_combine)):
-                multiplication_factor = self.multiply_factors(multiplication_factor, cpts_to_combine[i])
+            for j in range(1, len(cpts_to_combine)):
+                multiplication_factor = self.multiply_factors(multiplication_factor, cpts_to_combine[j])
 
             # sum out variable
             summed_out = self.sum_out(multiplication_factor, var)
@@ -378,10 +378,14 @@ class BNReasoner:
         # prune BN based on evidence
         self.network_pruning(query, evidence)
 
-        # eliminate query variables
-        self.var_elimination(query)
+        # elimate variables not in query
+        marginal = self.var_elimination([var for var in self.bn.get_all_variables() if var not in query])
 
-        return {var: self.bn.get_cpt(var) for var in query}
+        # normalize if evidence is not empty
+        if len(evidence) > 0:
+            marginal['p'] = marginal['p'] / sum(marginal['p'])
+
+        return marginal
 
 
     def mep(self, evidence, strategy="min-fill"):
@@ -433,13 +437,11 @@ class BNReasoner:
 if __name__ == '__main__':
     # Load the BN from the BIFXML file
     Reasoner = BNReasoner('testing\lecture_example.BIFXML')
-    Reasoner.bn.draw_structure()
 
     query=["Slippery Road?"]
-    evidence=pd.Series({"Rain?": True})
+    evidence=pd.Series({"Rain?": False, "Winter?": True})
 
     result = Reasoner.marginal_distributions(query, evidence)
+    Reasoner.bn.draw_structure()
 
-    for var, cpt in result.items():
-        print(var)
-        print(cpt)
+    print(result)
