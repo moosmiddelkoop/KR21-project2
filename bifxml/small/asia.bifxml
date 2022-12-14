@@ -2,7 +2,7 @@
 
 <BIF VERSION="0.3">
 <NETWORK>
-<NAME>bif/asia.bif</NAME>
+<NAME>bif/small/asia.bif</NAME>
 <PROPERTY>software aGrUM</PROPERTY>
 
 <!-- Variables -->
