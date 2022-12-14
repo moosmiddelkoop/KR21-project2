@@ -135,7 +135,7 @@ class BNReasoner:
         # find which edges to delete
         edges_to_delete = []
         for edge in self.bn.structure.edges:
-            if edge[0] in e:
+            if edge[0] in e: # Not sure about this line
                 edges_to_delete.append(edge)
         
         # do it in two steps to avoid changing the structure while iterating
@@ -155,7 +155,11 @@ class BNReasoner:
         # do until no new nodes or edges can be deleted:
         while self.edge_prune(Q, e) + self.node_prune(Q, e) != []:
             pass
-
+        
+        # Update CPTs in the BN internally
+        self.set_evidence(e)
+   
+       
     def d_seperation(self, x: set, y: set, z: set) -> bool:
         '''
         if all paths from x to y are blocked by z, then x and y are d-separated
@@ -242,7 +246,7 @@ class BNReasoner:
         
         return new_cpt
 
-    def max_out(self, X):
+    def max_out(self, factor, X):
         
         """Given variable X (as string), return the maxed-out CPT by X, along with the value of X for which the CPT is maxed out.
         Input:
@@ -251,8 +255,11 @@ class BNReasoner:
             Pandas DataFrame: The CPT summed out by X.
             Bool: The value of X for which the CPT has the max probability.
         """
-            
-        cpt = self.bn.get_cpt(X)
+                    
+        cpt = factor
+        if X not in cpt.columns:
+            raise ValueError("Variable not in CPT")
+        
         all_other_vars = [v for v in cpt.columns if v not in ['p', X]] 
         new_cpt = cpt.groupby(all_other_vars).max().reset_index()
         max_instantiation = new_cpt[X].iloc[0]
@@ -278,6 +285,48 @@ class BNReasoner:
         
         return new_cpt
 
+
+    def multiply_cpts_per_var(self, var, cpt_list):
+        '''
+        Function to multiply all factors that contain a certain variable
+        
+        input: 
+        - var: the variable name as string
+        - cpt_list: list of all factors as CPTs (Pandas Data Frames)
+        returns:
+        - cpts_per_var: list of all factors that contain the variable
+        - multiplication_factor: the multiplication of all factors that contain the variable
+        '''
+        
+        # Extract all cpts that contain the variable
+        cpts_per_var = [cpt for cpt in cpt_list if var in cpt.columns]
+        
+        # get multiplication factor (multiply all factors containing the variable)
+        multiplication_factor = cpts_per_var[0]
+        for j in range(1, len(cpts_per_var)):
+            multiplication_factor = self.multiply_factors(multiplication_factor, cpts_per_var[j])
+        
+        return cpts_per_var, multiplication_factor
+
+
+    def get_interaction_graph(self, variables):
+        """
+        Returns a networkx.Graph as interaction graph of the current BN.
+        :return: The interaction graph based on the factors of the current BN.
+        """
+        # Create the graph and add all variables
+        int_graph = nx.Graph()
+        [int_graph.add_node(var) for var in variables]
+
+        # connect all variables with an edge which are mentioned in a CPT together
+        for var in variables:
+            involved_vars = list(self.bn.get_cpt(var).columns)[:-1] # Can we use the "normal" CPTs or would we have to use the updated ones?
+            for i in range(len(involved_vars)-1):
+                for j in range(i+1, len(involved_vars)):
+                    if not int_graph.has_edge(involved_vars[i], involved_vars[j]):
+                        int_graph.add_edge(involved_vars[i], involved_vars[j])
+        return int_graph
+    
     def ordering(self, x, strategy=None):
         '''
         Given a set of variables X in the Bayesian network, computes a good ordering for the elimination of X based on:
@@ -290,52 +339,71 @@ class BNReasoner:
         returns: list of ordering of those variables
         '''
 
-        int_graph = self.bn.get_interaction_graph() # get interaction graph
-
+        variables = x.copy() # [i for i in x]
+        order = []
+        
         if strategy == 'min-degree':
+            
+            while len(variables) > 0:
+                
+                int_graph = self.get_interaction_graph(variables) # get interaction graph
 
-            # get degrees
-            degree_dict = {}
-           
-            for var in x:
+                # get degrees
+                degree_dict = {}
+            
+                for var in variables:
 
-                degree = len([c[0] if c[0] != var else c[1] for c in int_graph.edges if var in c])
-                degree_dict[var] = degree
+                    degree = len([c[0] if c[0] != var else c[1] for c in int_graph.edges if var in c])
+                    degree_dict[var] = degree
 
-            # return ordering, sort dict by values and create list of sorted keys
-            order = [k for k, v in sorted(degree_dict.items(), key=lambda item: item[1])]
+                # return ordering, sort dict by values and create list of sorted keys
+                min_var = [k for k, v in sorted(degree_dict.items(), key=lambda item: item[1])][0]
 
+                order.append(min_var)
+
+                # Now sum-out the variables in the order
+                variables.remove(min_var)
+            
             return order
 
         elif strategy == 'min-fill':
 
-            fill_dict = {}
-            for var in x:
-                
-                # Extract neighbor nodes from the interaction graph
-                node_list = [c[0] if c[0] != var else c[1] for c in int_graph.edges if var in c]
-                
-                # Iterate over nodes
-                needed_edges = 0
-                for node_1 in node_list:
-                    for node_2 in node_list:
-                        if node_2 != node_1: # Exlude self-loops
-                            edge = (node_1, node_2) 
-                            if edge not in int_graph.edges: # For all connected node pairs, check if they are connected already
-                                needed_edges += 1 # If not, add 1
-                    node_list.remove(node_1) # Remove checked node to avoid double counting
-                
-                fill_dict[var] = needed_edges 
+            while len(variables) > 0:
+                    
+                int_graph = self.get_interaction_graph(variables) # get interaction graph
 
-            order = [k for k, v in sorted(fill_dict.items(), key=lambda item: item[1])] # Sort based on number of needed edges
+                fill_dict = {}
+                for var in variables:
+                    
+                    # Extract neighbor nodes from the interaction graph
+                    node_list = [c[0] if c[0] != var else c[1] for c in int_graph.edges if var in c]
+                    
+                    # Iterate over nodes
+                    needed_edges = 0
+                    for node_1 in node_list:
+                        for node_2 in node_list:
+                            if node_2 != node_1: # Exlude self-loops
+                                edge = (node_1, node_2) 
+                                if edge not in int_graph.edges: # For all connected node pairs, check if they are connected already
+                                    needed_edges += 1 # If not, add 1
+                        node_list.remove(node_1) # Remove checked node to avoid double counting
+                    
+                    fill_dict[var] = needed_edges 
 
+                min_var = [k for k, v in sorted(fill_dict.items(), key=lambda item: item[1])][0]
+
+                order.append(min_var)
+                
+                # Now sum-out the variables in the order
+                variables.remove(min_var)
+                
             return order
 
         else:
             raise Exception('Please specify a ordering strategy, either min-degree or min-fill')
 
     
-    def var_elimination(self, x, ordering_strat='min-degree'):
+    def var_elimination(self, x, strategy='min-degree'):
         '''
         given a set of variables x, eliminate variables in the right order
         optional input: ordering strategy: 'min-degree' or 'min-fill'. Standard: 'min-degree'
@@ -343,39 +411,39 @@ class BNReasoner:
         '''
 
         # get ordering
-        order = self.ordering(x, strategy=ordering_strat)
+        order = self.ordering(x, strategy=strategy)
 
-        for i, var in enumerate(order):
-
-            # get multiplication factor (multiply all factors containing the variable)
-            cpts_to_combine = list(self.find_cpts_for_var(var).values())
-
-            # after the first iteration, there is a summed out factor already from last iteration. add it to the list of factors to combine
-            if i != 0:
-                cpts_to_combine.append(summed_out)
-
-            multiplication_factor = cpts_to_combine[0]
-            for j in range(1, len(cpts_to_combine)):
-                multiplication_factor = self.multiply_factors(multiplication_factor, cpts_to_combine[j])
+        all_cpts = list(self.bn.get_all_cpts().values())
+        
+        for var in order:
+            
+            # Get the multiplication factor and a list of all CPTs that contain the variable
+            cpts_per_var, multiplication_factor = self.multiply_cpts_per_var(var, all_cpts)
 
             # sum out variable
-            summed_out = self.sum_out(multiplication_factor, var)
+            summed_out = Reasoner.sum_out(multiplication_factor, var)
+            
+            # Delete CPTs of variables that were already summed out
+            relevant_cols = [list(cpt.columns) for cpt in cpts_per_var]
+            all_cpts = [cpt for cpt in all_cpts if list(cpt.columns) not in relevant_cols]
+            
+            # Add summed-out CPT, such that it can be multiplied with the remaining CPTs
+            all_cpts.append(summed_out)
 
         return summed_out
 
+
     def marginal_distributions(self, query: List[str], evidence: pd.Series) -> List[str]:
-        """
+        '''
         Given a query and evidence, return the marginal distribution of the query variables.
         Input:
             query: List of variable names.
             evidence: a series of assignments as tuples. E.g.: pd.Series({"A": True, "B": False})
         Returns:
             marginal_distribution: A dictionary with the query variable names as keys and the corresponding marginal distributions as values.
-        """
-        # set evidence
-        self.set_evidence(evidence)
-
-        # prune BN based on evidence
+        '''
+        
+        # prune BN based on evidence (evidence is now automatically set in the pruning function)
         self.network_pruning(query, evidence)
 
         # elimate variables not in query
@@ -388,7 +456,7 @@ class BNReasoner:
         return marginal
 
 
-    def mep(self, evidence, strategy="min-fill"):
+    def mpe(self, evidence, strategy="min-fill"):
         
         """
         Given some evidence, return the instantiation that is most probable.
@@ -401,32 +469,31 @@ class BNReasoner:
             probability: The probability of the instantiation.
         """
         
-        # Frist: Pruning based on evidence
-        cpt_dict = {}
-        for var in self.bn.get_all_variables():
-            cpt = self.bn.get_cpt(var)
-            
-            # Pruning based on evidence
-            for ev in evidence.keys():
-                if ev in cpt.columns:
-                    cpt = cpt[cpt[ev] == evidence[ev]]   
-                             
-            cpt_dict[var] = cpt
-        
-        # No particular order applied here; Could be improved
-        order = Reasoner.bn.get_all_variables()
+        self.network_pruning(self.bn.get_all_variables(), evidence)
 
-        # Multiply all CPTs
-        for i, var in enumerate(order):
-            if i == 0:
-                running_cpt = cpt_dict[var]
-            else:
-                running_cpt = self.multiply_factors(running_cpt, cpt_dict[var])
+        var_list = list(self.bn.get_all_cpts().keys())
         
-        # Extract that instantiation for which the combined probability is maximized
-        instantiation = running_cpt[running_cpt["p"] == max(running_cpt["p"])][Reasoner.bn.get_all_variables()].to_dict('records')[0]
+        # Do correct ordering based on all variables
+        order = self.ordering(var_list, strategy=strategy)
+        
+        all_cpts = list(Reasoner.bn.get_all_cpts().values())
+
+        for var in order:
             
-        return instantiation, max(running_cpt["p"])
+            cpts_per_var, multiplication_factor = self.multiply_cpts_per_var(var, all_cpts)
+            
+            # Delete CPTs of variables that were already summed out, but add the combined and summed out CPT instead
+            relevant_cols = [list(cpt.columns) for cpt in cpts_per_var]
+            all_cpts = [cpt for cpt in all_cpts if list(cpt.columns) not in relevant_cols]
+            
+            # Add summed-out CPT
+            all_cpts.append(multiplication_factor)
+            
+        # Extract that instantiation for which the combined probability is maximized
+        instantiation = multiplication_factor[multiplication_factor["p"] == max(multiplication_factor["p"])][Reasoner.bn.get_all_variables()].to_dict('records')[0]
+            
+        return instantiation, max(multiplication_factor["p"])
+    
     
     def map(self, Q, evidence, strategy="min-fill"):
         
@@ -445,3 +512,7 @@ if __name__ == '__main__':
     Reasoner.bn.draw_structure()
 
     print(result)
+
+
+
+
