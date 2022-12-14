@@ -83,21 +83,24 @@ class BNReasoner:
 
         return cpts_per_var
 
-    def set_evidence(self, evidence):
+    def set_evidence(self, evidence = {}):
         '''
         given a pd.Series of evidence, set the evidence in the BN, return updated CPTs
         '''
         # get all cpts that contain evidence
-        cpts = {}
-        for var in evidence.index:
-            cpts.update(self.find_cpts_for_var(var))
+        if len(evidence) > 1:
+            cpts = {}
+            for var in evidence.index:
+                cpts.update(self.find_cpts_for_var(var))
 
-        # set evidence for cpts
-        for var, cpt in cpts.items():
-            new_cpt = self.bn.get_compatible_instantiations_table(evidence, cpt)
-            self.bn.update_cpt(var, new_cpt)
-
-        return cpts
+            # set evidence for cpts
+            for var, cpt in cpts.items():
+                new_cpt = self.bn.get_compatible_instantiations_table(evidence, cpt)
+                self.bn.update_cpt(var, new_cpt)
+                
+                return cpts
+        else:
+            pass
 
         
     # ALGORITHM FUNCTIONS -----------------------------------------------------------------------------------------------
@@ -421,7 +424,7 @@ class BNReasoner:
             cpts_per_var, multiplication_factor = self.multiply_cpts_per_var(var, all_cpts)
 
             # sum out variable
-            summed_out = Reasoner.sum_out(multiplication_factor, var)
+            summed_out = self.sum_out(multiplication_factor, var)
             
             # Delete CPTs of variables that were already summed out
             relevant_cols = [list(cpt.columns) for cpt in cpts_per_var]
@@ -476,7 +479,7 @@ class BNReasoner:
         # Do correct ordering based on all variables
         order = self.ordering(var_list, strategy=strategy)
         
-        all_cpts = list(Reasoner.bn.get_all_cpts().values())
+        all_cpts = list(self.bn.get_all_cpts().values())
 
         for var in order:
             
@@ -490,7 +493,7 @@ class BNReasoner:
             all_cpts.append(multiplication_factor)
             
         # Extract that instantiation for which the combined probability is maximized
-        instantiation = multiplication_factor[multiplication_factor["p"] == max(multiplication_factor["p"])][Reasoner.bn.get_all_variables()].to_dict('records')[0]
+        instantiation = multiplication_factor[multiplication_factor["p"] == max(multiplication_factor["p"])][self.bn.get_all_variables()].to_dict('records')[0]
             
         return instantiation, max(multiplication_factor["p"])
     
@@ -512,7 +515,6 @@ if __name__ == '__main__':
     Reasoner.bn.draw_structure()
 
     print(result)
-
 
 
 
