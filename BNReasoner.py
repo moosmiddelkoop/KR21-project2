@@ -85,7 +85,7 @@ class BNReasoner:
 
         return cpts_per_var
 
-    def set_evidence(self, evidence = {}):
+    def set_evidence(self, evidence: pd.Series):
         '''
         given a pd.Series of evidence, set the evidence in the BN, return updated CPTs
         '''
@@ -159,8 +159,7 @@ class BNReasoner:
             pass
         
         # Update CPTs in the BN internally
-        if e:
-            self.set_evidence(e)
+        self.set_evidence(e)
    
        
     def d_seperation(self, x: set, y: set, z: set) -> bool:
