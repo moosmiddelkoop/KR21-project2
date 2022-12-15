@@ -3,7 +3,7 @@ from BNReasoner import BNReasoner
 import random
 import time
 
-FILE = 'bifxml/small/asia.bifxml'
+FILE = 'useable/win95pts.bifxml'
 
 class Experiment:
 
@@ -26,7 +26,7 @@ class Experiment:
         start = time.time()
 
         # eliminate the variables in the right order
-        final_cpt = self.Reasoner.var_elimination(sample, ordering_strat='min-fill')
+        final_cpt = self.Reasoner.var_elimination(sample, strategy='min-fill')
 
         end = time.time()
 
@@ -35,7 +35,10 @@ class Experiment:
         return final_cpt, runtime
 
 Experiment1 = Experiment(FILE)
-print(Experiment1.ordering_strategy_experiment(0.5, 'min_fill'))
+
+result, runtime = (Experiment1.ordering_strategy_experiment(0.15, 'min_degree'))
+
+print(f"this took {runtime*1000} ms")
 
 
 
