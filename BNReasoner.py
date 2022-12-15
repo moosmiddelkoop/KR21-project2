@@ -503,15 +503,29 @@ class BNReasoner:
     
     
     def map(self, query, evidence, strategy="min-fill"):
+        """
+        Given a query and some evidence, return the instantiation that maximizes the marginal distribition P(Q/e) along with the probability.
         
+        Input:
+            query: List of variable names to compute the marginal distribution for, given the evidence.
+            evidence: Dictionary with variable names as keys and truth values as values.
+            strategy: Strategy to order the variables by; "min-fill" or "min-degree".
+        Returns:
+            instantiation: A dictionary with all variable names as keys and the truth values for which the probability is maximized.
+            probability: The probability of the instantiation.
+        """
+        
+        # Compute marginal distribution
         marginal = self.marginal_distributions(query, evidence, strategy)
+        
+        # Max out all query variables to get the instantiation for which the probability is maximized
         instantiation = {}
         for var in query:
             maxed_out = self.max_out(marginal, var)
-            marginal = maxed_out[0]
-            instantiation[var] = maxed_out[1]
+            marginal = maxed_out[0] # Store the new marginal distribution
+            instantiation[var] = maxed_out[1] # Store the instantiation for which the probability is maximized
                     
-        return maxed_out[0], instantiation 
+        return instantiation, maxed_out[0] 
 
 
 if __name__ == '__main__':
