@@ -122,33 +122,32 @@ class BNReasoner:
         return removed
 
 
-    def edge_prune(self, Q, e):
+    def edge_prune(self, Q, e: pd.Series):
         '''
         Prunes the edges of the network, given query variables Q and evidence e
         Input:
         - Q: list of query variables
-        - e: dictionary of evidence variables with truth values
+        - e: pd.Series of evidence variables with truth values {var: val}
         Output:
         - Removed edges
-
-        WORKS EXCEPT TABLES NEED TO BE UPDATED STILL
         '''
+        removed = []
+        # prune all edges that go out of evidence nodes (for each node U in e: del U -> X, update CPT of X)
+        for var, val in e.items():
+            for child in self.bn.get_children(var):
+                edge = (var, child)
+                # remove edge (U -> X) from network
+                self.bn.del_edge(edge)
 
-        # find which edges to delete
-        edges_to_delete = []
-        for edge in self.bn.structure.edges:
-            if edge[0] in e: # Not sure about this line
-                edges_to_delete.append(edge)
-        
-        # do it in two steps to avoid changing the structure while iterating
-        for edge in edges_to_delete:
-            self.bn.del_edge(edge)
+                # reduce factor and sum out U, update CPT of X
+                reduced_factor = self.bn.reduce_factor(pd.Series({var: val}), self.bn.get_cpt(child))
+                reduced_factor = self.sum_out(reduced_factor, var)
+                self.bn.update_cpt(child, reduced_factor)
 
-        return edges_to_delete
+                removed.append(edge)
 
-        # use bn.reduce_factor() to update the tables (not really sure how to do this)
-        # or use get_compatible_instantiation table! (someone said this in the zoom)        
-        # evidence for tables in which evidence is the given variable
+        return removed
+
 
     def network_pruning(self, Q, e):
         """
@@ -157,60 +156,32 @@ class BNReasoner:
         # do until no new nodes or edges can be deleted:
         while self.edge_prune(Q, e) + self.node_prune(Q, e) != []:
             pass
-        
-        # Update CPTs in the BN internally
-        self.set_evidence(e)
    
        
-    def d_seperation(self, x: set, y: set, z: set) -> bool:
+    def is_d_seperated(self, X: set, Y: set, Z: set) -> bool:
         '''
         if all paths from x to y are blocked by z, then x and y are d-separated
         if there is a path from x to y that is not blocked by z, then x and y are not d-separated
         Paths between sets of nodes can be exponentially many. By using pruning, d-seperation can be computed in linear time.
         '''
 
-        # do until no new nodes or edges can be deleted:
-        while True:
-
-            no_changes = 0
-
-            # delete every leaf node, except those in x, y, or z
-            old_nodes = self.bn.get_all_variables()
-
-            leaf_nodes = self.find_leaf_nodes()
-            [self.bn.del_var(leaf_node) for leaf_node in leaf_nodes if leaf_node not in x and leaf_node not in y and leaf_node not in z]
-            new_nodes = self.bn.get_all_variables()
-
-            # no nodes deleted
-            if old_nodes == new_nodes:
-                no_changes += 1
-
-            # delete all outgoing edges from nodes in z
-            edges_deleted = 0
-            for node in z:
-                children = self.bn.get_children(node)
-                edges_deleted += len(children)
-                for child in children:
-                    self.bn.del_edge((node, child))
-            
-            if edges_deleted == 0:
-                no_changes += 1
-
-            if no_changes >= 2:
-                break
+        # we can use network pruning for this if we set Q = x U y, e = z
+        Q = X.union(Y)
+        e = {z: True for z in Z}  # set mock value for evidence to not frustrate code
+        self.network_pruning(Q, e)
 
         # if there is a path from x to y that is not blocked by z, then x and y are not d-separated
         # d-seperated iff all possible connections don't have a path
         # return False as soon as a connection is found
-        for var_x in x:
-            for var_y in y:
-                if self.is_connected(var_x, var_y):
+        for x in X:
+            for y in Y:
+                if self.is_connected(x, y):
                     return False
 
-        # otherwise return True
+        # all paths are disconnected, return True
         return True
 
-    def indepencence(self, x, y, z):    
+    def indepencence(self, X, Y, Z):    
         '''
         Given three sets of variables x, y, and z, determine wether x and y are independent given z
         input:
@@ -220,12 +191,10 @@ class BNReasoner:
         output: 
         bool
         '''
-
-        # IS THIS ALL?!
-        return self.d_seperation(x, y, z)
+        # IS THIS ALL?! #TODO: There is an edge case where odds are fifty fifty, d-seperation would return False even though the var IS indepedent
+        return self.is_d_seperated(X, Y, Z)
 
     def sum_out(self, factor, X):
-        
         """
         Given a factor and variable X, return the CPT of X summed out.
         Input:
@@ -234,16 +203,18 @@ class BNReasoner:
         Returns:
             Pandas DataFrame: The CPT summed out by X.
         """
-        # edge case where you some out over the whole factor
-        if len(factor.columns) == 2:
-            # remove the row where p = 0, this leaves a single line CPT with the set value (T/F) for the variable
-            return factor[factor['p'] != 0].reset_index(drop=True)
-        
         cpt = factor
         if X not in cpt.columns:
             raise ValueError("Variable not in CPT")
 
         all_other_vars = [v for v in cpt.columns if v not in ['p', X]]
+
+        # edge case where there are no other variables
+        if len(all_other_vars) == 0:
+            # sum on p
+            return pd.DataFrame({'p': [cpt['p'].sum()]})
+        
+        # sum out x
         new_cpt = cpt.groupby(all_other_vars).sum().reset_index()[all_other_vars + ['p']]
         
         return new_cpt
@@ -272,8 +243,7 @@ class BNReasoner:
         return new_cpt, max_instantiation
     
     
-    def multiply_factors(self, fact_1, fact_2):
-        
+    def multiply_factors(self, f1, f2):
         """
         Given two factors (as CPTs (Pandas Data Frames)), return the outer product of the two factors with new probabilities (probs of the single factors multiplied).
         Input:
@@ -282,9 +252,15 @@ class BNReasoner:
         Returns:
             new_cpt: CPT which displays the outer product of the two factors where the probabilities of the single factors are multiplied.
         """
+        common_columns = [var for var in self.bn.get_all_variables() if var in f1.columns and var in f2.columns]
 
-        common_columns = [var for var in self.bn.get_all_variables() if var in fact_1.columns and var in fact_2.columns]
-        new_cpt = pd.merge(fact_1, fact_2, on = common_columns, how='outer')
+        # edge case if no common columns
+        if len(common_columns) == 0:
+            new_cpt = f1.merge(f2, how='cross')
+        # else merge on common columns
+        else:
+            new_cpt = pd.merge(f1, f2, on = common_columns, how='outer')
+        
         new_cpt['p'] = new_cpt['p_x'] * new_cpt['p_y']
         new_cpt.drop(['p_x', 'p_y'], axis=1, inplace=True)
         
@@ -539,7 +515,3 @@ if __name__ == '__main__':
     bnr.network_pruning(query, evidence)
 
     bnr.get_interaction_graph()
-
-
-    print(result)
-
