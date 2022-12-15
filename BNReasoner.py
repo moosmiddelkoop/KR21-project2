@@ -76,6 +76,8 @@ class BNReasoner:
     def find_cpts_for_var(self, var):
         '''
         returns a list of all cpts that contain the var
+
+        BROKEN: does not work after pruning
         '''
         cpts_per_var = {var: self.bn.get_cpt(var)}
         for child in self.bn.get_children(var):
@@ -83,7 +85,7 @@ class BNReasoner:
 
         return cpts_per_var
 
-    def set_evidence(self, evidence):
+    def set_evidence(self, evidence = {}):
         '''
         given a pd.Series of evidence, set the evidence in the BN, return updated CPTs
         '''
@@ -96,7 +98,7 @@ class BNReasoner:
         for var, cpt in cpts.items():
             new_cpt = self.bn.get_compatible_instantiations_table(evidence, cpt)
             self.bn.update_cpt(var, new_cpt)
-
+            
         return cpts
 
         
@@ -157,7 +159,8 @@ class BNReasoner:
             pass
         
         # Update CPTs in the BN internally
-        self.set_evidence(e)
+        if e:
+            self.set_evidence(e)
    
        
     def d_seperation(self, x: set, y: set, z: set) -> bool:
@@ -261,6 +264,9 @@ class BNReasoner:
             raise ValueError("Variable not in CPT")
         
         all_other_vars = [v for v in cpt.columns if v not in ['p', X]] 
+        if len(all_other_vars) == 0:
+            return cpt.max()[1], True if cpt.max()[0] == 1.0 else False
+
         new_cpt = cpt.groupby(all_other_vars).max().reset_index()
         max_instantiation = new_cpt[X].iloc[0]
         new_cpt = new_cpt[all_other_vars + ['p']]
@@ -326,6 +332,7 @@ class BNReasoner:
                     if not int_graph.has_edge(involved_vars[i], involved_vars[j]):
                         int_graph.add_edge(involved_vars[i], involved_vars[j])
         return int_graph
+    
     
     def ordering(self, x, strategy=None):
         '''
@@ -433,7 +440,7 @@ class BNReasoner:
         return summed_out
 
 
-    def marginal_distributions(self, query: List[str], evidence: pd.Series) -> List[str]:
+    def marginal_distributions(self, query: List[str], evidence: pd.Series, strategy: str) -> List[str]:
         '''
         Given a query and evidence, return the marginal distribution of the query variables.
         Input:
@@ -447,7 +454,7 @@ class BNReasoner:
         self.network_pruning(query, evidence)
 
         # elimate variables not in query
-        marginal = self.var_elimination([var for var in self.bn.get_all_variables() if var not in query])
+        marginal = self.var_elimination([var for var in self.bn.get_all_variables() if var not in query], strategy = strategy)
 
         # normalize if evidence is not empty
         if len(evidence) > 0:
@@ -476,7 +483,7 @@ class BNReasoner:
         # Do correct ordering based on all variables
         order = self.ordering(var_list, strategy=strategy)
         
-        all_cpts = list(Reasoner.bn.get_all_cpts().values())
+        all_cpts = list(self.bn.get_all_cpts().values())
 
         for var in order:
             
@@ -490,29 +497,52 @@ class BNReasoner:
             all_cpts.append(multiplication_factor)
             
         # Extract that instantiation for which the combined probability is maximized
-        instantiation = multiplication_factor[multiplication_factor["p"] == max(multiplication_factor["p"])][Reasoner.bn.get_all_variables()].to_dict('records')[0]
+        instantiation = multiplication_factor[multiplication_factor["p"] == max(multiplication_factor["p"])][self.bn.get_all_variables()].to_dict('records')[0]
             
         return instantiation, max(multiplication_factor["p"])
     
     
-    def map(self, Q, evidence, strategy="min-fill"):
+    def map(self, query, evidence, strategy="min-fill"):
+        """
+        Given a query and some evidence, return the instantiation that maximizes the marginal distribition P(Q/e) along with the probability.
         
-        ### TBD ###
+        Input:
+            query: List of variable names to compute the marginal distribution for, given the evidence.
+            evidence: Dictionary with variable names as keys and truth values as values.
+            strategy: Strategy to order the variables by; "min-fill" or "min-degree".
+        Returns:
+            instantiation: A dictionary with all variable names as keys and the truth values for which the probability is maximized.
+            probability: The probability of the instantiation.
+        """
         
-        return None 
+        # Compute marginal distribution
+        marginal = self.marginal_distributions(query, evidence, strategy)
+        
+        # Max out all query variables to get the instantiation for which the probability is maximized
+        instantiation = {}
+        for var in query:
+            maxed_out = self.max_out(marginal, var)
+            marginal = maxed_out[0] # Store the new marginal distribution
+            instantiation[var] = maxed_out[1] # Store the instantiation for which the probability is maximized
+                    
+        return instantiation, maxed_out[0] 
+
 
 if __name__ == '__main__':
     # Load the BN from the BIFXML file
-    Reasoner = BNReasoner('testing\lecture_example.BIFXML')
+    bnr = BNReasoner('testing\lecture_example.BIFXML')
+
+    bnr.bn.draw_structure()
 
     query=["Slippery Road?"]
     evidence=pd.Series({"Rain?": False, "Winter?": True})
 
-    result = Reasoner.marginal_distributions(query, evidence)
-    Reasoner.bn.draw_structure()
+    bnr.network_pruning(query, evidence)
+
+    bnr.get_interaction_graph()
+
 
     print(result)
-
 
 
 
