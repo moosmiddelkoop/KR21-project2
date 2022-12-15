@@ -88,19 +88,16 @@ class BNReasoner:
         given a pd.Series of evidence, set the evidence in the BN, return updated CPTs
         '''
         # get all cpts that contain evidence
-        if len(evidence) > 0:
-            cpts = {}
-            for var in evidence.index:
-                cpts.update(self.find_cpts_for_var(var))
+        cpts = {}
+        for var in evidence.index:
+            cpts.update(self.find_cpts_for_var(var))
 
-            # set evidence for cpts
-            for var, cpt in cpts.items():
-                new_cpt = self.bn.get_compatible_instantiations_table(evidence, cpt)
-                self.bn.update_cpt(var, new_cpt)
-                
-            return cpts
-        else:
-            pass
+        # set evidence for cpts
+        for var, cpt in cpts.items():
+            new_cpt = self.bn.get_compatible_instantiations_table(evidence, cpt)
+            self.bn.update_cpt(var, new_cpt)
+            
+        return cpts
 
         
     # ALGORITHM FUNCTIONS -----------------------------------------------------------------------------------------------
@@ -160,7 +157,8 @@ class BNReasoner:
             pass
         
         # Update CPTs in the BN internally
-        self.set_evidence(e)
+        if e:
+            self.set_evidence(e)
    
        
     def d_seperation(self, x: set, y: set, z: set) -> bool:
@@ -508,13 +506,17 @@ class BNReasoner:
 
 if __name__ == '__main__':
     # Load the BN from the BIFXML file
-    Reasoner = BNReasoner('testing\lecture_example.BIFXML')
+    bnr = BNReasoner('testing\lecture_example.BIFXML')
+
+    bnr.bn.draw_structure()
 
     query=["Slippery Road?"]
     evidence=pd.Series({"Rain?": False, "Winter?": True})
 
-    result = Reasoner.marginal_distributions(query, evidence, strategy="min-fill")
-    Reasoner.bn.draw_structure()
+    bnr.network_pruning(query, evidence)
+
+    bnr.get_interaction_graph()
+
 
     print(result)
 
