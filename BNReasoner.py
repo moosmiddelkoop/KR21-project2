@@ -421,7 +421,7 @@ class BNReasoner:
             cpts_per_var, multiplication_factor = self.multiply_cpts_per_var(var, all_cpts)
 
             # sum out variable
-            summed_out = Reasoner.sum_out(multiplication_factor, var)
+            summed_out = self.sum_out(multiplication_factor, var)
             
             # Delete CPTs of variables that were already summed out
             relevant_cols = [list(cpt.columns) for cpt in cpts_per_var]
