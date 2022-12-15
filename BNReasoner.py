@@ -88,7 +88,7 @@ class BNReasoner:
         given a pd.Series of evidence, set the evidence in the BN, return updated CPTs
         '''
         # get all cpts that contain evidence
-        if len(evidence) > 1:
+        if len(evidence) > 0:
             cpts = {}
             for var in evidence.index:
                 cpts.update(self.find_cpts_for_var(var))
@@ -98,7 +98,7 @@ class BNReasoner:
                 new_cpt = self.bn.get_compatible_instantiations_table(evidence, cpt)
                 self.bn.update_cpt(var, new_cpt)
                 
-                return cpts
+            return cpts
         else:
             pass
 
@@ -436,7 +436,7 @@ class BNReasoner:
         return summed_out
 
 
-    def marginal_distributions(self, query: List[str], evidence: pd.Series) -> List[str]:
+    def marginal_distributions(self, query: List[str], evidence: pd.Series, strategy: str) -> List[str]:
         '''
         Given a query and evidence, return the marginal distribution of the query variables.
         Input:
@@ -450,7 +450,7 @@ class BNReasoner:
         self.network_pruning(query, evidence)
 
         # elimate variables not in query
-        marginal = self.var_elimination([var for var in self.bn.get_all_variables() if var not in query])
+        marginal = self.var_elimination([var for var in self.bn.get_all_variables() if var not in query], strategy = strategy)
 
         # normalize if evidence is not empty
         if len(evidence) > 0:
@@ -498,11 +498,13 @@ class BNReasoner:
         return instantiation, max(multiplication_factor["p"])
     
     
-    def map(self, Q, evidence, strategy="min-fill"):
+    def map(self, query, evidence, strategy="min-fill"):
         
-        ### TBD ###
+        marginal = self.marginal_distributions(query, evidence, strategy)
+        max_instantiation = self.max_out(marginal, query)
         
-        return None 
+        return max_instantiation 
+
 
 if __name__ == '__main__':
     # Load the BN from the BIFXML file
@@ -511,10 +513,12 @@ if __name__ == '__main__':
     query=["Slippery Road?"]
     evidence=pd.Series({"Rain?": False, "Winter?": True})
 
-    result = Reasoner.marginal_distributions(query, evidence)
+    result = Reasoner.marginal_distributions(query, evidence, strategy="min-fill")
     Reasoner.bn.draw_structure()
 
     print(result)
+
+
 
 
 

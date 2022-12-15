@@ -79,42 +79,42 @@
     <!-- PCTs -->
     <DEFINITION>
         <FOR>Tourist</FOR>
-        <TABLE>0.03 0.97</TABLE>
+        <TABLE>0.97 0.03</TABLE>
     </DEFINITION>
     <DEFINITION>
         <FOR>Leather Outfit</FOR>
-        <TABLE>0.05 0.95</TABLE>
+        <TABLE>0.95 0.05</TABLE>
     </DEFINITION>
     <DEFINITION>
         <FOR>Piercings</FOR>
-        <TABLE>0.1 0.9</TABLE>
+        <TABLE>0.9 0.1</TABLE>
     </DEFINITION>
     <DEFINITION>
         <FOR>Wasted</FOR>
         <GIVEN>Tourist</GIVEN>
-        <TABLE>0.75 0.25 0.4 0.6</TABLE>
+        <TABLE> 0.6 0.4 0.25 0.75</TABLE>
     </DEFINITION>
     <DEFINITION>
         <FOR>DJ</FOR>
         <GIVEN>Wasted</GIVEN>
-        <TABLE>0.3 0.7 0.4 0.6</TABLE>
+        <TABLE>0.6 0.4 0.7 0.3 </TABLE>
     </DEFINITION>
     <DEFINITION>
         <FOR>Enter at Night</FOR>
         <GIVEN>Tourist</GIVEN>
-        <TABLE>0.7 0.3 0.1 0.9</TABLE> <!-- Order? Rain?, Sprinkler?, Wet Grass?-->
+        <TABLE>0.9 0.1 0.3 0.7</TABLE> <!-- Order? Rain?, Sprinkler?, Wet Grass?-->
     </DEFINITION>
     <DEFINITION>
         <FOR>Guestlist</FOR>
         <GIVEN>DJ</GIVEN>
         <GIVEN>Tourist</GIVEN>
-        <TABLE>0.3 0.7 0.9 0.1 0.01 0.99 0.1 0.9</TABLE>
+        <TABLE> 0.9 0.1 0.99 0.01 0.1 0.9 0.7 0.3 </TABLE>
     </DEFINITION>
     <DEFINITION>
         <FOR>Queer Looks</FOR>
         <GIVEN>Leather Outfit</GIVEN>
         <GIVEN>Piercings</GIVEN>
-        <TABLE>0.9 0.1 0.8 0.2 0.4 0.6 0.2 0.8</TABLE>
+        <TABLE>0.8 0.2 0.6 0.4 0.2 0.8 0.1 0.9</TABLE>
     </DEFINITION>
     <DEFINITION>
         <FOR>Enter Berghain</FOR>
