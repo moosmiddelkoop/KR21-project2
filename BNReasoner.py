@@ -264,6 +264,9 @@ class BNReasoner:
             raise ValueError("Variable not in CPT")
         
         all_other_vars = [v for v in cpt.columns if v not in ['p', X]] 
+        if len(all_other_vars) == 0:
+            return cpt.max()[1], True if cpt.max()[0] == 1.0 else False
+
         new_cpt = cpt.groupby(all_other_vars).max().reset_index()
         max_instantiation = new_cpt[X].iloc[0]
         new_cpt = new_cpt[all_other_vars + ['p']]
@@ -329,6 +332,7 @@ class BNReasoner:
                     if not int_graph.has_edge(involved_vars[i], involved_vars[j]):
                         int_graph.add_edge(involved_vars[i], involved_vars[j])
         return int_graph
+    
     
     def ordering(self, x, strategy=None):
         '''
@@ -501,9 +505,13 @@ class BNReasoner:
     def map(self, query, evidence, strategy="min-fill"):
         
         marginal = self.marginal_distributions(query, evidence, strategy)
-        max_instantiation = self.max_out(marginal, query)
-        
-        return max_instantiation 
+        instantiation = {}
+        for var in query:
+            maxed_out = self.max_out(marginal, var)
+            marginal = maxed_out[0]
+            instantiation[var] = maxed_out[1]
+                    
+        return maxed_out[0], instantiation 
 
 
 if __name__ == '__main__':
@@ -517,8 +525,4 @@ if __name__ == '__main__':
     Reasoner.bn.draw_structure()
 
     print(result)
-
-
-
-
 
