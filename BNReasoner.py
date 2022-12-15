@@ -76,6 +76,8 @@ class BNReasoner:
     def find_cpts_for_var(self, var):
         '''
         returns a list of all cpts that contain the var
+
+        BROKEN: does not work after pruning
         '''
         cpts_per_var = {var: self.bn.get_cpt(var)}
         for child in self.bn.get_children(var):
