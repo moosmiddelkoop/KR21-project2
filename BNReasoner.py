@@ -264,6 +264,9 @@ class BNReasoner:
             raise ValueError("Variable not in CPT")
         
         all_other_vars = [v for v in cpt.columns if v not in ['p', X]] 
+        if len(all_other_vars) == 0:
+            return cpt.max()[1], True if cpt.max()[0] == 1.0 else False
+
         new_cpt = cpt.groupby(all_other_vars).max().reset_index()
         max_instantiation = new_cpt[X].iloc[0]
         new_cpt = new_cpt[all_other_vars + ['p']]
@@ -329,6 +332,7 @@ class BNReasoner:
                     if not int_graph.has_edge(involved_vars[i], involved_vars[j]):
                         int_graph.add_edge(involved_vars[i], involved_vars[j])
         return int_graph
+    
     
     def ordering(self, x, strategy=None):
         '''
@@ -499,11 +503,29 @@ class BNReasoner:
     
     
     def map(self, query, evidence, strategy="min-fill"):
+        """
+        Given a query and some evidence, return the instantiation that maximizes the marginal distribition P(Q/e) along with the probability.
         
+        Input:
+            query: List of variable names to compute the marginal distribution for, given the evidence.
+            evidence: Dictionary with variable names as keys and truth values as values.
+            strategy: Strategy to order the variables by; "min-fill" or "min-degree".
+        Returns:
+            instantiation: A dictionary with all variable names as keys and the truth values for which the probability is maximized.
+            probability: The probability of the instantiation.
+        """
+        
+        # Compute marginal distribution
         marginal = self.marginal_distributions(query, evidence, strategy)
-        max_instantiation = self.max_out(marginal, query)
         
-        return max_instantiation 
+        # Max out all query variables to get the instantiation for which the probability is maximized
+        instantiation = {}
+        for var in query:
+            maxed_out = self.max_out(marginal, var)
+            marginal = maxed_out[0] # Store the new marginal distribution
+            instantiation[var] = maxed_out[1] # Store the instantiation for which the probability is maximized
+                    
+        return instantiation, maxed_out[0] 
 
 
 if __name__ == '__main__':
@@ -521,8 +543,4 @@ if __name__ == '__main__':
 
 
     print(result)
-
-
-
-
 
