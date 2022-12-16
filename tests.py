@@ -1,12 +1,18 @@
 from BNReasoner import BNReasoner
 from copy import deepcopy
+import pandas as pd
 
 # load BNReasoner objects
 dog_problem_bnr = BNReasoner('testing\dog_problem.BIFXML')
 example_1_bnr =  BNReasoner('testing\lecture_example.BIFXML')
 example_2_bnr =  BNReasoner('testing\lecture_example2.BIFXML')
+example_alarm = BNReasoner('testing\lecture_example_alarm.BIFXML')
 
-bnrs = [dog_problem_bnr, example_1_bnr, example_2_bnr]
+bnrs = [dog_problem_bnr, example_1_bnr, example_2_bnr, example_alarm]
+
+# show graphs
+for bnr in bnrs:
+    bnr.bn.draw_structure()
 
 # print variables for each BNReasoner
 for bnr in bnrs:
@@ -36,8 +42,8 @@ assert(example_2_bnr.is_connected("I", "I"))
 
 # tests for find_cpts_per_var
 for bnr in bnrs:
-    cpts = bnr.find_cpts_per_var()
     all_vars = bnr.bn.get_all_variables()
+    cpts = {var: bnr.find_cpts_for_var(var) for var in all_vars}
     for var in cpts:
         assert(var in all_vars)
         assert(var in cpts[var])
@@ -48,9 +54,54 @@ for bnr in bnrs:
 # tests for set_evidence
 for bnr in bnrs:
     vars = bnr.bn.get_all_variables()
+    evidence = {}
+    # set evidence for all variables to True
+    # this is done expandingly to test several evidence lenghts
     for var in vars:
-        bnr.set_evidence(var, True)
-        assert(bnr.bn.get_evidence(var) == True)
-        bnr.set_evidence(var, False)
-        assert(bnr.bn.get_evidence(var) == False)
+        bnr = deepcopy(bnr)
+        evidence[var] = True
+        bnr.set_evidence(pd.Series(evidence))
 
+    # check that no cpt has False in it (exclude p column to avoid 0.0 probability recognised as False)
+    assert(all([False not in cpt.loc[ : , cpt.columns != 'p'].to_numpy().flatten() for cpt in bnr.bn.get_all_cpts().values()]))
+
+# test pruning
+bnr = deepcopy(example_1_bnr)
+evidence = pd.Series({"Winter?": True, "Rain?": False})
+query = ["Wet Grass?"]
+
+bnr.network_pruning(query, evidence)
+
+# check if winter and rain are completely disconnected
+interaction_graph = bnr.bn.get_interaction_graph()
+assert(len(interaction_graph.edges("Winter?")) == 0)
+assert(len(interaction_graph.edges("Rain?")) == 0)
+
+# check if sprinkler and wet grass are connected
+assert(bnr.bn.get_children("Sprinkler?") == ["Wet Grass?"])
+
+# check if cpts are correct, see lecture notes for correct values: lecture 3, slide 31
+[print(f"{var}\n{cpt}") for var, cpt in bnr.bn.get_all_cpts().items()]
+
+# test for d-separation
+# test lecture examples: lecture 2 slide 31
+bnr = deepcopy(example_alarm)
+assert(bnr.is_d_seperated({"R"}, {"B"}, {"E", "C"}))
+
+bnr = deepcopy(example_alarm)
+assert(bnr.is_d_seperated({"E"}, {"B"}, {}))
+
+bnr = deepcopy(example_alarm)
+assert(not bnr.is_d_seperated({"E"}, {"B"}, {"C"}))
+
+bnr = deepcopy(example_alarm)
+assert(not bnr.is_d_seperated({"R"}, {"C"}, {}))
+
+# tests for summing out, lecture 3, slide 8
+bnr = deepcopy(example_1_bnr)
+summed_out = bnr.sum_out(bnr.bn.get_cpt("Wet Grass?"), "Wet Grass?")
+summed_out = bnr.sum_out(summed_out, "Rain?")
+summed_out = bnr.sum_out(summed_out, "Sprinkler?")
+assert(summed_out['p'].tolist() == [4.0])
+
+# tests for maxing out
