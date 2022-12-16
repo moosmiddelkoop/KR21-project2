@@ -5,6 +5,7 @@ import time
 from tqdm import tqdm
 import numpy as np
 from scipy import stats
+import pandas as pd
 
 FILES = ['asia', 'Berlin_clubs', 'cancer', 'dog_problem', 'earthquake', 'lecture_example', 'lecture_example2']
 
@@ -40,6 +41,23 @@ class Experiment:
 
         return final_cpt, runtime
 
+    def marginal_distribution_experiment(self, query_size, ordering_strategy):
+
+        # get the variables in the BN (list of strings)
+        variables = self.Reasoner.bn.get_all_variables()
+
+        # get query
+        query = random.sample(variables, query_size)
+        evidence = pd.Series()
+
+        start = time.time()
+
+        marginal = self.Reasoner.marginal_distributions(query, evidence, strategy=ordering_strategy)
+
+        end = time.time()
+        runtime = end - start
+
+        return marginal, runtime
 
 
 def experiment(percentage_vars, ordering_strategy, files, runs):
@@ -69,9 +87,12 @@ if __name__ == '__main__':
 
     # print(stats.ttest_ind(min_fill_runtimes, min_degree_runtimes))
 
-    Experiment1 = Experiment('usable/andes.bifxml')
-    result, runtime = Experiment1.ordering_strategy_experiment(0.2, 'min-fill') 
-    print(f"This took {runtime*1000} milliseconds")
+    Experiment1 = Experiment('usable/win95pts.bifxml')
+    # result, runtime = Experiment1.ordering_strategy_experiment(0.9, 'min-fill') 
+    # print(f"This took {runtime*1000} milliseconds")
+
+    marginal, runtime = Experiment1.marginal_distribution_experiment(5, 'min-fill')
+    print(runtime)
 
 
 
