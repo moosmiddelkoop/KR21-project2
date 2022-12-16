@@ -40,7 +40,6 @@ class Experiment:
 
         return final_cpt, runtime
 
-    iop
 
 
 def experiment(percentage_vars, ordering_strategy, files, runs):
@@ -63,13 +62,16 @@ def experiment(percentage_vars, ordering_strategy, files, runs):
 
 if __name__ == '__main__':
 
-    min_fill_resuts, min_fill_runtimes = experiment(0.8, 'min-fill', FILES, 1000)
-    min_degree_resuts, min_degree_runtimes = experiment(0.8, 'min-degree', FILES, 1000)
-    print(np.mean(min_fill_runtimes))
-    print(np.mean(min_degree_runtimes))
+    # min_fill_resuts, min_fill_runtimes = experiment(0.8, 'min-fill', FILES, 1000)
+    # min_degree_resuts, min_degree_runtimes = experiment(0.8, 'min-degree', FILES, 1000)
+    # print(np.mean(min_fill_runtimes))
+    # print(np.mean(min_degree_runtimes))
 
-    print(stats.ttest_ind(min_fill_runtimes, min_degree_runtimes))
-    
+    # print(stats.ttest_ind(min_fill_runtimes, min_degree_runtimes))
+
+    Experiment1 = Experiment('usable/andes.bifxml')
+    result, runtime = Experiment1.ordering_strategy_experiment(0.2, 'min-fill') 
+    print(f"This took {runtime*1000} milliseconds")
 
 
 
