@@ -2,10 +2,16 @@ import BayesNet
 from BNReasoner import BNReasoner
 import random
 import time
+from tqdm import tqdm
+import numpy as np
+from scipy import stats
 
-FILE = 'useable/win95pts.bifxml'
+FILES = ['asia', 'Berlin_clubs', 'cancer', 'dog_problem', 'earthquake', 'lecture_example', 'lecture_example2']
 
 class Experiment:
+    '''
+    Runs into memory issues with the bigger networks (tables get too large)
+    '''
 
     def __init__(self, file_path):
         """
@@ -34,11 +40,36 @@ class Experiment:
 
         return final_cpt, runtime
 
-Experiment1 = Experiment(FILE)
+    iop
 
-result, runtime = (Experiment1.ordering_strategy_experiment(0.15, 'min_degree'))
 
-print(f"this took {runtime*1000} ms")
+def experiment(percentage_vars, ordering_strategy, files, runs):
+
+    results = []
+    runtimes = []
+
+    for file in tqdm(files):
+        for run in range(runs):
+
+            Experiment1 = Experiment(f'usable/{file}.bifxml')
+            result, runtime = Experiment1.ordering_strategy_experiment(percentage_vars, ordering_strategy)
+            results.append(result)
+            runtimes.append(runtime)
+
+    return results, runtimes
+
+
+
+
+if __name__ == '__main__':
+
+    min_fill_resuts, min_fill_runtimes = experiment(0.8, 'min-fill', FILES, 1000)
+    min_degree_resuts, min_degree_runtimes = experiment(0.8, 'min-degree', FILES, 1000)
+    print(np.mean(min_fill_runtimes))
+    print(np.mean(min_degree_runtimes))
+
+    print(stats.ttest_ind(min_fill_runtimes, min_degree_runtimes))
+    
 
 
 
