@@ -1,14 +1,17 @@
 from BNReasoner import BNReasoner
 from copy import deepcopy
 import pandas as pd
+import networkx as nx
+import matplotlib.pyplot as plt
 
 # load BNReasoner objects
 dog_problem_bnr = BNReasoner('testing\dog_problem.BIFXML')
 example_1_bnr =  BNReasoner('testing\lecture_example.BIFXML')
 example_2_bnr =  BNReasoner('testing\lecture_example2.BIFXML')
 example_alarm = BNReasoner('testing\lecture_example_alarm.BIFXML')
+example_simple = BNReasoner('testing\lecture_example_simple.BIFXML')
 
-bnrs = [dog_problem_bnr, example_1_bnr, example_2_bnr, example_alarm]
+bnrs = [dog_problem_bnr, example_1_bnr, example_2_bnr, example_alarm, example_simple]
 
 # show graphs
 for bnr in bnrs:
@@ -105,3 +108,25 @@ summed_out = bnr.sum_out(summed_out, "Sprinkler?")
 assert(summed_out['p'].tolist() == [4.0])
 
 # tests for maxing out
+bnr = deepcopy(example_1_bnr)
+maxed_out = bnr.max_out(bnr.bn.get_cpt("Wet Grass?"), "Wet Grass?")
+print(maxed_out)
+
+# tests for ordering
+for bnr in bnrs:
+    bnr = deepcopy(bnr)
+    # show interaction graph for visual inspection
+    nx.draw(bnr.bn.get_interaction_graph(), with_labels=True)
+    # min degree ordering
+    print("min degree ordering: ", bnr.ordering(bnr.bn.get_all_variables(), "min-degree"))
+    # min fill ordering
+    print("min fill ordering: ", bnr.ordering(bnr.bn.get_all_variables(), "min-fill"))
+    plt.show()
+
+# test var elimination
+bnr = deepcopy(example_1_bnr)
+bnr.var_elimination(["Wet Grass?", "Sprinkler?", "Rain?"])
+
+bnr = deepcopy(example_simple)
+[print(f"{var}\n{cpt}") for var, cpt in bnr.bn.get_all_cpts().items()]
+bnr.var_elimination(["B", "A"])
