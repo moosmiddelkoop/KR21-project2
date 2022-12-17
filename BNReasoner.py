@@ -408,6 +408,8 @@ class BNReasoner:
             for cpt in order[var]:
                 factor = self.multiply_factors(factor, cpt)
             # sum out variable
+            print(f"pre sum out:\n{factor}\n")
+            print(f"summing out: {var}")
             factor = self.sum_out(factor, var)
             print(factor)
         
