@@ -9,7 +9,31 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 
+
 #%%
+
+Reasoner = BNReasoner('testing/Berlin_clubs.BIFXML')
+all_cpts = Reasoner.bn.get_all_cpts()
+
+all_cpts['Tourist'].to_latex()
+all_cpts['Wasted'].to_latex()
+all_cpts['DJ'].to_latex()
+all_cpts['Guestlist'].to_latex()
+all_cpts['Piercings'].to_latex()
+all_cpts['Leather Outfit'].to_latex()
+all_cpts['Queer Looks'].to_latex()
+all_cpts['Enter at Night'].to_latex()
+all_cpts['Enter Berghain'].to_latex()
+all_cpts['Enter Matrix'].to_latex()
+
+
+
+
+
+
+
+#%%
+
 
 ##########################
 ######## Berghain ########
@@ -20,9 +44,9 @@ import matplotlib.pyplot as plt
 Reasoner = BNReasoner('testing/Berlin_clubs.BIFXML')
 query = ['Queer Looks', 'Enter Berghain', 'Tourist']
 anti_query = [var for var in Reasoner.bn.get_all_variables() if var not in query]
-print("Probability of a foreign / local DJ entering Berghain and looking queer:")
-Reasoner.var_elimination(anti_query, strategy = "min-fill")
-
+print("Probability of a foreign / local entering Berghain and looking queer:")
+result = Reasoner.var_elimination(anti_query, strategy = "min-fill")
+result.to_latex()
 # Discoveries:
 # Mostl likely: Not being a Tourist and not looking Queer and not getting in (plausible)
 # With being a local with queer looks it is almost twice as likely to get into Berghain

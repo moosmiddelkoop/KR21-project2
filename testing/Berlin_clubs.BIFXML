@@ -83,38 +83,41 @@
     </DEFINITION>
     <DEFINITION>
         <FOR>Leather Outfit</FOR>
-        <TABLE>0.95 0.05</TABLE>
+        <TABLE>0.98 0.02</TABLE>
     </DEFINITION>
     <DEFINITION>
         <FOR>Piercings</FOR>
-        <TABLE>0.9 0.1</TABLE>
+        <TABLE>0.935 0.065</TABLE>
     </DEFINITION>
     <DEFINITION>
         <FOR>Wasted</FOR>
         <GIVEN>Tourist</GIVEN>
-        <TABLE>0.6 0.4 0.25 0.75</TABLE>
+        <GIVEN>Enter at Night</GIVEN>
+        <TABLE>0.8 0.2 0.5 0.5 0.3 0.7 0.05 0.95</TABLE>
     </DEFINITION>
     <DEFINITION>
         <FOR>DJ</FOR>
-        <GIVEN>Wasted</GIVEN>
-        <TABLE>0.6 0.4 0.7 0.3 </TABLE>
+        <GIVEN>Tourist</GIVEN>
+        <GIVEN>Piercings</GIVEN>
+        <TABLE>0.85 0.15 0.97 0.03 0.25 0.75 0.85 0.15 </TABLE>
     </DEFINITION>
     <DEFINITION>
         <FOR>Enter at Night</FOR>
         <GIVEN>Tourist</GIVEN>
-        <TABLE>0.9 0.1 0.3 0.7</TABLE> <!-- Order? Rain?, Sprinkler?, Wet Grass?-->
+        <GIVEN>Leather Outfit</GIVEN>
+        <TABLE>0.5 0.5 0.2 0.8 0.75 0.25 0.6 0.4</TABLE> <!-- Order? Rain?, Sprinkler?, Wet Grass?-->
     </DEFINITION>
     <DEFINITION>
         <FOR>Guestlist</FOR>
         <GIVEN>DJ</GIVEN>
         <GIVEN>Tourist</GIVEN>
-        <TABLE> 0.9 0.1 0.99 0.01 0.1 0.9 0.7 0.3 </TABLE>
+        <TABLE> 0.9 0.1 0.6 0.4 0.01 0.99 0.8 0.2 </TABLE>
     </DEFINITION>
     <DEFINITION>
         <FOR>Queer Looks</FOR>
-        <GIVEN>Leather Outfit</GIVEN>
         <GIVEN>Piercings</GIVEN>
-        <TABLE>0.8 0.2 0.6 0.4 0.2 0.8 0.1 0.9</TABLE>
+        <GIVEN>Leather Outfit</GIVEN>
+        <TABLE>0.8 0.2 0.7 0.3 0.25 0.75 0.1 0.9</TABLE>
     </DEFINITION>
     <DEFINITION>
         <FOR>Enter Berghain</FOR>
@@ -122,7 +125,7 @@
         <GIVEN>Wasted</GIVEN>
         <GIVEN>Queer Looks</GIVEN>
         <GIVEN>Guestlist</GIVEN>
-        <TABLE> 0.65 0.35 0.75 0.25 0.85 0.15 0.95 0.05 0.2 0.8 0.3 0.7 0.6 0.4 0.7 0.3 0.05 0.95 0.15 0.85 0.55 0.45 0.6 0.4 0.05 0.95 0.1 0.9 0.4 0.6 0.5 0.5</TABLE>
+        <TABLE> 0.65 0.35 0.75 0.25 0.85 0.15 0.95 0.05 0.4 0.6 0.55 0.45 0.7 0.3 0.85 0.15 0.05 0.95 0.15 0.85 0.55 0.45 0.6 0.4 0.02 0.98 0.08 0.92 0.4 0.6 0.5 0.5</TABLE>
     </DEFINITION>
     <DEFINITION>
         <FOR>Enter Matrix</FOR>
@@ -130,7 +133,7 @@
         <GIVEN>Wasted</GIVEN>
         <GIVEN>Tourist</GIVEN>
         <GIVEN>Guestlist</GIVEN>
-        <TABLE> 1 0 0.1 0.9 1 0 0.35 0.65 1 0 0.2 0.8 1 0 0.4 0.6 1 0 0.05 0.95 1 0 0.15 0.85 1 0 0.1 0.9 1 0 0.2 0.8</TABLE>
+        <TABLE> 1 0 0.1 0.9 1 0 0.35 0.65 1 0 0.2 0.8 1 0 0.5 0.5 1 0 0.05 0.95 1 0 0.15 0.85 1 0 0.1 0.9 1 0 0.2 0.8</TABLE>
     </DEFINITION> 
 </NETWORK>
 </BIF>
