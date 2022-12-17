@@ -41,14 +41,15 @@ class Experiment:
 
         return final_cpt, runtime
 
-    def marginal_distribution_experiment(self, query_size, ordering_strategy):
+    def marginal_distribution_experiment(self, query_size, evidence_size, ordering_strategy):
 
         # get the variables in the BN (list of strings)
         variables = self.Reasoner.bn.get_all_variables()
 
         # get query
         query = random.sample(variables, query_size)
-        evidence = pd.Series()
+        whats_left = [var for var in variables if var not in query]
+        evidence = pd.Series({var: random.choice([True, False]) for var in random.sample(whats_left, evidence_size)})
 
         start = time.time()
 
@@ -91,7 +92,7 @@ if __name__ == '__main__':
     # result, runtime = Experiment1.ordering_strategy_experiment(0.9, 'min-fill') 
     # print(f"This took {runtime*1000} milliseconds")
 
-    marginal, runtime = Experiment1.marginal_distribution_experiment(5, 'min-fill')
+    marginal, runtime = Experiment1.marginal_distribution_experiment(5, 5, 'min-fill')
     print(runtime)
 
 
