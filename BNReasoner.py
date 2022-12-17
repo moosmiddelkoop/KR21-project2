@@ -1,4 +1,5 @@
 from typing import List, Tuple, Dict, Union
+from networkx import Graph
 
 from BayesNet import BayesNet
 import pandas as pd
@@ -73,19 +74,21 @@ class BNReasoner:
         # if graph is exhausted, and no connections were found, return False
         return False
 
-    def find_cpts_for_var(self, var):
+    def find_cpts_for_var(self, var: str) -> Dict:
         '''
-        returns a list of all cpts that contain the var
-
-        BROKEN: does not work after pruning
+        returns a dict of all cpts that contain the var
         '''
-        cpts_per_var = {var: self.bn.get_cpt(var)}
-        for child in self.bn.get_children(var):
-            cpts_per_var[child] = self.bn.get_cpt(child)
+        cpts = {var: self.bn.get_cpt(var)}
+        interaction_graph = self.bn.get_interaction_graph()
+        for n in interaction_graph.neighbors(var):
+            cpt = self.bn.get_cpt(n)
+            if var in cpt.columns:
+                cpts[n] = self.bn.get_cpt(n)
+        
+        return cpts
 
-        return cpts_per_var
 
-    def set_evidence(self, evidence = {}):
+    def set_evidence(self, evidence: pd.Series):
         '''
         given a pd.Series of evidence, set the evidence in the BN, return updated CPTs
         '''
@@ -118,37 +121,37 @@ class BNReasoner:
 
                 self.bn.del_var(leaf_node)
                 removed.append(leaf_node)
+                print(f"Removed {leaf_node} from network")
         
         return removed
 
 
-    def edge_prune(self, Q, e):
+    def edge_prune(self, Q, e: pd.Series):
         '''
         Prunes the edges of the network, given query variables Q and evidence e
         Input:
         - Q: list of query variables
-        - e: dictionary of evidence variables with truth values
+        - e: pd.Series of evidence variables with truth values {var: val}
         Output:
         - Removed edges
-
-        WORKS EXCEPT TABLES NEED TO BE UPDATED STILL
         '''
+        removed = []
+        # prune all edges that go out of evidence nodes (for each node U in e: del U -> X, update CPT of X)
+        for var, val in e.items():
+            for child in self.bn.get_children(var):
+                edge = (var, child)
+                # remove edge (U -> X) from network
+                self.bn.del_edge(edge)
 
-        # find which edges to delete
-        edges_to_delete = []
-        for edge in self.bn.structure.edges:
-            if edge[0] in e: # Not sure about this line
-                edges_to_delete.append(edge)
-        
-        # do it in two steps to avoid changing the structure while iterating
-        for edge in edges_to_delete:
-            self.bn.del_edge(edge)
+                # reduce factor and sum out U, update CPT of X
+                reduced_factor = self.bn.reduce_factor(pd.Series({var: val}), self.bn.get_cpt(child))
+                reduced_factor = self.sum_out(reduced_factor, var)
+                self.bn.update_cpt(child, reduced_factor)
 
-        return edges_to_delete
+                removed.append(edge)
 
-        # use bn.reduce_factor() to update the tables (not really sure how to do this)
-        # or use get_compatible_instantiation table! (someone said this in the zoom)        
-        # evidence for tables in which evidence is the given variable
+        return removed
+
 
     def network_pruning(self, Q, e):
         """
@@ -157,61 +160,32 @@ class BNReasoner:
         # do until no new nodes or edges can be deleted:
         while self.edge_prune(Q, e) + self.node_prune(Q, e) != []:
             pass
-        
-        # Update CPTs in the BN internally
-        if e:
-            self.set_evidence(e)
    
        
-    def d_seperation(self, x: set, y: set, z: set) -> bool:
+    def is_d_seperated(self, X: set, Y: set, Z: set) -> bool:
         '''
         if all paths from x to y are blocked by z, then x and y are d-separated
         if there is a path from x to y that is not blocked by z, then x and y are not d-separated
         Paths between sets of nodes can be exponentially many. By using pruning, d-seperation can be computed in linear time.
         '''
 
-        # do until no new nodes or edges can be deleted:
-        while True:
-
-            no_changes = 0
-
-            # delete every leaf node, except those in x, y, or z
-            old_nodes = self.bn.get_all_variables()
-
-            leaf_nodes = self.find_leaf_nodes()
-            [self.bn.del_var(leaf_node) for leaf_node in leaf_nodes if leaf_node not in x and leaf_node not in y and leaf_node not in z]
-            new_nodes = self.bn.get_all_variables()
-
-            # no nodes deleted
-            if old_nodes == new_nodes:
-                no_changes += 1
-
-            # delete all outgoing edges from nodes in z
-            edges_deleted = 0
-            for node in z:
-                children = self.bn.get_children(node)
-                edges_deleted += len(children)
-                for child in children:
-                    self.bn.del_edge((node, child))
-            
-            if edges_deleted == 0:
-                no_changes += 1
-
-            if no_changes >= 2:
-                break
+        # we can use network pruning for this if we set Q = x U y, e = z
+        Q = X.union(Y)
+        e = {z: True for z in Z}  # set mock value for evidence to not frustrate code
+        self.network_pruning(Q, e)
 
         # if there is a path from x to y that is not blocked by z, then x and y are not d-separated
         # d-seperated iff all possible connections don't have a path
         # return False as soon as a connection is found
-        for var_x in x:
-            for var_y in y:
-                if self.is_connected(var_x, var_y):
+        for x in X:
+            for y in Y:
+                if self.is_connected(x, y):
                     return False
 
-        # otherwise return True
+        # all paths are disconnected, return True
         return True
 
-    def indepencence(self, x, y, z):    
+    def indepencence(self, X, Y, Z):    
         '''
         Given three sets of variables x, y, and z, determine wether x and y are independent given z
         input:
@@ -221,12 +195,10 @@ class BNReasoner:
         output: 
         bool
         '''
-
-        # IS THIS ALL?!
-        return self.d_seperation(x, y, z)
+        # IS THIS ALL?! #TODO: There is an edge case where odds are fifty fifty, d-seperation would return False even though the var IS indepedent
+        return self.is_d_seperated(X, Y, Z)
 
     def sum_out(self, factor, X):
-        
         """
         Given a factor and variable X, return the CPT of X summed out.
         Input:
@@ -235,46 +207,56 @@ class BNReasoner:
         Returns:
             Pandas DataFrame: The CPT summed out by X.
         """
-        # edge case where you some out over the whole factor
-        if len(factor.columns) == 2:
-            # remove the row where p = 0, this leaves a single line CPT with the set value (T/F) for the variable
-            return factor[factor['p'] != 0].reset_index(drop=True)
-        
         cpt = factor
         if X not in cpt.columns:
             raise ValueError("Variable not in CPT")
 
         all_other_vars = [v for v in cpt.columns if v not in ['p', X]]
+
+        # edge case where there are no other variables
+        if len(all_other_vars) == 0:
+            # sum on p
+            return pd.DataFrame({'p': [cpt['p'].sum()]})
+        
+        # sum out x
         new_cpt = cpt.groupby(all_other_vars).sum().reset_index()[all_other_vars + ['p']]
         
         return new_cpt
 
     def max_out(self, factor, X):
         
-        """Given variable X (as string), return the maxed-out CPT by X, along with the value of X for which the CPT is maxed out.
+        """Given variable X (as string), return the maxed-out CPT by X, along with the values of X for which the CPT is maxed out.
         Input:
             X: string indicating the variable to be maxed out.
         Returns:
-            Pandas DataFrame: The CPT summed out by X.
-            Bool: The value of X for which the CPT has the max probability.
+            Pandas DataFrame: The CPT maxed out by X. The values for X are given after the "p" column.
         """
                     
         cpt = factor
         if X not in cpt.columns:
             raise ValueError("Variable not in CPT")
         
-        all_other_vars = [v for v in cpt.columns if v not in ['p', X]] 
-        if len(all_other_vars) == 0:
-            return cpt.max()[1], True if cpt.max()[0] == 1.0 else False
+        # get all other vars
+        all_other_vars = [v for v in cpt.columns if v not in ['p', X]]
 
-        new_cpt = cpt.groupby(all_other_vars).max().reset_index()
-        max_instantiation = new_cpt[X].iloc[0]
-        new_cpt = new_cpt[all_other_vars + ['p']]
-        return new_cpt, max_instantiation
-    
-    
-    def multiply_factors(self, fact_1, fact_2):
+        # edge case where there are no other variables
+        if len(all_other_vars) == 0:
+            # return row with max p
+            return cpt[cpt.p == cpt.p.max()]
         
+        # find max occurrences
+        new_cpt = cpt.groupby(all_other_vars)["p"].max()
+        # merge var with max occurrences back in
+        # this effecively creates an extended factor with the maxed out variable
+        new_cpt = pd.merge(cpt, new_cpt, on="p")
+        
+        # move maxed out var to back to indicate it is set
+        new_cpt = new_cpt[[v for v in new_cpt.columns if v != X] + [X]]
+        
+        return new_cpt
+    
+    
+    def multiply_factors(self, f1, f2):
         """
         Given two factors (as CPTs (Pandas Data Frames)), return the outer product of the two factors with new probabilities (probs of the single factors multiplied).
         Input:
@@ -283,9 +265,15 @@ class BNReasoner:
         Returns:
             new_cpt: CPT which displays the outer product of the two factors where the probabilities of the single factors are multiplied.
         """
+        common_columns = [var for var in self.bn.get_all_variables() if var in f1.columns and var in f2.columns]
 
-        common_columns = [var for var in self.bn.get_all_variables() if var in fact_1.columns and var in fact_2.columns]
-        new_cpt = pd.merge(fact_1, fact_2, on = common_columns, how='outer')
+        # edge case if no common columns
+        if len(common_columns) == 0:
+            new_cpt = f1.merge(f2, how='cross')
+        # else merge on common columns
+        else:
+            new_cpt = pd.merge(f1, f2, on = common_columns, how='outer')
+        
         new_cpt['p'] = new_cpt['p_x'] * new_cpt['p_y']
         new_cpt.drop(['p_x', 'p_y'], axis=1, inplace=True)
         
@@ -314,26 +302,6 @@ class BNReasoner:
         
         return cpts_per_var, multiplication_factor
 
-
-    def get_interaction_graph(self, variables):
-        """
-        Returns a networkx.Graph as interaction graph of the current BN.
-        :return: The interaction graph based on the factors of the current BN.
-        """
-        # Create the graph and add all variables
-        int_graph = nx.Graph()
-        [int_graph.add_node(var) for var in variables]
-
-        # connect all variables with an edge which are mentioned in a CPT together
-        for var in variables:
-            involved_vars = list(self.bn.get_cpt(var).columns)[:-1] # Can we use the "normal" CPTs or would we have to use the updated ones?
-            for i in range(len(involved_vars)-1):
-                for j in range(i+1, len(involved_vars)):
-                    if not int_graph.has_edge(involved_vars[i], involved_vars[j]):
-                        int_graph.add_edge(involved_vars[i], involved_vars[j])
-        return int_graph
-    
-    
     def ordering(self, x, strategy=None):
         '''
         Given a set of variables X in the Bayesian network, computes a good ordering for the elimination of X based on:
@@ -345,102 +313,108 @@ class BNReasoner:
 
         returns: list of ordering of those variables
         '''
+        variables = set(x)
 
-        variables = x.copy() # [i for i in x]
-        order = []
-        
+        # set strategy
         if strategy == 'min-degree':
-            
-            while len(variables) > 0:
-                
-                int_graph = self.get_interaction_graph(variables) # get interaction graph
-
-                # get degrees
-                degree_dict = {}
-            
-                for var in variables:
-
-                    degree = len([c[0] if c[0] != var else c[1] for c in int_graph.edges if var in c])
-                    degree_dict[var] = degree
-
-                # return ordering, sort dict by values and create list of sorted keys
-                min_var = [k for k, v in sorted(degree_dict.items(), key=lambda item: item[1])][0]
-
-                order.append(min_var)
-
-                # Now sum-out the variables in the order
-                variables.remove(min_var)
-            
-            return order
-
+            get_degree = self.get_degree
         elif strategy == 'min-fill':
-
-            while len(variables) > 0:
-                    
-                int_graph = self.get_interaction_graph(variables) # get interaction graph
-
-                fill_dict = {}
-                for var in variables:
-                    
-                    # Extract neighbor nodes from the interaction graph
-                    node_list = [c[0] if c[0] != var else c[1] for c in int_graph.edges if var in c]
-                    
-                    # Iterate over nodes
-                    needed_edges = 0
-                    for node_1 in node_list:
-                        for node_2 in node_list:
-                            if node_2 != node_1: # Exlude self-loops
-                                edge = (node_1, node_2) 
-                                if edge not in int_graph.edges: # For all connected node pairs, check if they are connected already
-                                    needed_edges += 1 # If not, add 1
-                        node_list.remove(node_1) # Remove checked node to avoid double counting
-                    
-                    fill_dict[var] = needed_edges 
-
-                min_var = [k for k, v in sorted(fill_dict.items(), key=lambda item: item[1])][0]
-
-                order.append(min_var)
-                
-                # Now sum-out the variables in the order
-                variables.remove(min_var)
-                
-            return order
-
+            get_degree = self.get_fill_degree
         else:
-            raise Exception('Please specify a ordering strategy, either min-degree or min-fill')
+            raise ValueError(f'Strategy {strategy} not implemented')
 
+        interaction_graph = self.bn.get_interaction_graph()
+        order = []
+
+        while len(variables) > 0:
+            # get variable with lowest degree
+            degrees = {var: get_degree(var, interaction_graph) for var in variables}
+            min_var = min(degrees, key=degrees.get)
+
+            # add to order
+            order.append(min_var)
+
+            # prune interaction graph
+            self.prune_interaction_graph(interaction_graph, min_var)
+            
+            # remove min_var from variables
+            variables.remove(min_var)
+        
+        return order
+
+    @staticmethod
+    def get_degree(var: str, interaction_graph: Graph) -> int:
+        """
+        Returns the degree of the variable var in the interaction graph.
+        :param var: The variable for which the degree should be returned.
+        :return: The degree of the variable var in the interaction graph.
+        """
+        return len(interaction_graph.edges(var))
     
-    def var_elimination(self, x, strategy='min-degree'):
+    def get_fill_degree(self, var: str, interaction_graph: Graph) -> int:
+        """
+        Returns the fill degree of the variable var in the interaction graph.
+        :param var: The variable for which the fill degree should be returned.
+        :return: The fill degree of the variable var in the interaction graph.
+        """
+        return self.prune_interaction_graph(interaction_graph.copy(), var)
+        
+    @staticmethod
+    def prune_interaction_graph(interaction_graph: Graph, var: str) -> int:
+        """
+        Prunes the interaction graph by removing the node var and connecting all nodes connected to var together.
+
+        Return: the number of edges that were added to the interaction graph
+        """
+        # connect all nodes connected to min_var together
+        neighbors = [n for n in interaction_graph.neighbors(var)]
+        added_edges = 0
+        for i, node in enumerate(neighbors):
+            for j in range(i+1, len(neighbors)):
+                # if edge does not exist yet, add it
+                if not interaction_graph.has_edge(node, neighbors[j]):
+                    interaction_graph.add_edge(node, neighbors[j])
+                    added_edges += 1
+        
+        # remove var node
+        interaction_graph.remove_node(var)
+
+        return added_edges
+    
+    def var_elimination(self, X, strategy='min-degree'):
         '''
-        given a set of variables x, eliminate variables in the right order
+        given a set of variables X, eliminate variables in the right order
         optional input: ordering strategy: 'min-degree' or 'min-fill'. Standard: 'min-degree'
         returns: resulting factor
         '''
-
-        # get ordering
-        order = self.ordering(x, strategy=strategy)
-
-        all_cpts = list(self.bn.get_all_cpts().values())
+        # set cpts in multiplation order
+        interaction_graph = self.bn.get_interaction_graph()
+        order = {}
+        cpts = []
+        ordering = self.ordering(X, strategy=strategy)
+        for var in ordering:
+            order[var] = []
+            # get all factors that contain the variable
+            for cpt_var, cpt in self.find_cpts_for_var(var).items():
+                if cpt_var not in cpts:
+                    cpts.append(cpt_var)
+                    order[var].append(cpt)
         
+        # multiply factors in order
+        factor = pd.DataFrame({'p': [1]})
         for var in order:
-            
-            # Get the multiplication factor and a list of all CPTs that contain the variable
-            cpts_per_var, multiplication_factor = self.multiply_cpts_per_var(var, all_cpts)
-
+            # multiply all factors that contain the variable
+            for cpt in order[var]:
+                factor = self.multiply_factors(factor, cpt)
             # sum out variable
-            summed_out = self.sum_out(multiplication_factor, var)
-            
-            # Delete CPTs of variables that were already summed out
-            relevant_cols = [list(cpt.columns) for cpt in cpts_per_var]
-            all_cpts = [cpt for cpt in all_cpts if list(cpt.columns) not in relevant_cols]
-            
-            # Add summed-out CPT, such that it can be multiplied with the remaining CPTs
-            all_cpts.append(summed_out)
-
-        return summed_out
+            print(f"pre sum out:\n{factor}\n")
+            print(f"summing out: {var}")
+            factor = self.sum_out(factor, var)
+        
+        return factor
 
 
-    def marginal_distributions(self, query: List[str], evidence: pd.Series, strategy: str) -> List[str]:
+    def marginal_distributions(self, query: List[str], evidence: pd.Series, strategy='min-degree') -> List[str]:
         '''
         Given a query and evidence, return the marginal distribution of the query variables.
         Input:
@@ -449,17 +423,25 @@ class BNReasoner:
         Returns:
             marginal_distribution: A dictionary with the query variable names as keys and the corresponding marginal distributions as values.
         '''
-        
-        # prune BN based on evidence (evidence is now automatically set in the pruning function)
+        # prune BN based on evidence
         self.network_pruning(query, evidence)
 
-        # elimate variables not in query
-        marginal = self.var_elimination([var for var in self.bn.get_all_variables() if var not in query], strategy = strategy)
+        # set evidence
+        self.set_evidence(evidence)
 
-        # normalize if evidence is not empty
-        if len(evidence) > 0:
-            marginal['p'] = marginal['p'] / sum(marginal['p'])
+        print("#########################################")
+        for var, cpt in self.bn.get_all_cpts().items():
+            print(var)
+            print(cpt)
 
+        # elimate variables not in query or evidence
+        marginal = self.var_elimination([var for var in self.bn.get_all_variables() if var not in query and var not in evidence], strategy=strategy)
+
+        # if evidence, sum out q to compute posterior marginal
+        if not evidence.empty:
+            # normalize marginal
+            marginal['p'] = marginal['p'] / marginal['p'].sum()
+        
         return marginal
 
 
@@ -540,9 +522,3 @@ if __name__ == '__main__':
     bnr.network_pruning(query, evidence)
 
     bnr.get_interaction_graph()
-
-
-    print(result)
-
-
-
