@@ -30,6 +30,7 @@ assert(set(example_2_bnr.find_leaf_nodes()) == set(['O']))
 
 # since all nodes should be connected to each other, all should return True
 for bnr in bnrs:
+    bnr = deepcopy(bnr)
     vars = bnr.bn.get_all_variables()
     for i, start in enumerate(vars):
         for end in vars[i+1:]:
@@ -41,7 +42,8 @@ temp.bn.del_edge(("I", "X"))
 assert(not temp.is_connected("I", "X"))
 
 # test for connection to self
-assert(example_2_bnr.is_connected("I", "I"))
+bnr = deepcopy(example_2_bnr)
+assert(bnr.is_connected("I", "I"))
 
 # tests for find_cpts_per_var
 for bnr in bnrs:
@@ -52,6 +54,8 @@ for bnr in bnrs:
         assert(var in cpts[var])
 
         for var_2 in cpts[var]:
+            print(var, var_2)
+            print(var in bnr.bn.get_cpt(var_2).columns)
             assert(var in bnr.bn.get_cpt(var_2).columns)
 
 # tests for set_evidence
@@ -125,8 +129,12 @@ for bnr in bnrs:
 
 # test var elimination
 bnr = deepcopy(example_1_bnr)
-bnr.var_elimination(["Wet Grass?", "Sprinkler?", "Rain?"])
+print(bnr.var_elimination(["Wet Grass?", "Sprinkler?", "Rain?"]))
 
 bnr = deepcopy(example_simple)
 [print(f"{var}\n{cpt}") for var, cpt in bnr.bn.get_all_cpts().items()]
-bnr.var_elimination(["B", "A"])
+print(bnr.var_elimination(["B", "A"]))
+
+# test for marginalisation
+bnr = deepcopy(example_simple)
+print(bnr.marginal_distributions(["C"], pd.Series({"A": True})))
