@@ -74,17 +74,19 @@ class BNReasoner:
         # if graph is exhausted, and no connections were found, return False
         return False
 
-    def find_cpts_for_var(self, var):
+    def find_cpts_for_var(self, var: str) -> Dict:
         '''
-        returns a list of all cpts that contain the var
-
-        BROKEN: does not work after pruning
+        returns a dict of all cpts that contain the var
         '''
-        cpts_per_var = {var: self.bn.get_cpt(var)}
-        for child in self.bn.get_children(var):
-            cpts_per_var[child] = self.bn.get_cpt(child)
+        cpts = {var: self.bn.get_cpt(var)}
+        interaction_graph = self.bn.get_interaction_graph()
+        for n in interaction_graph.neighbors(var):
+            cpt = self.bn.get_cpt(n)
+            if var in cpt.columns:
+                cpts[n] = self.bn.get_cpt(n)
+        
+        return cpts
 
-        return cpts_per_var
 
     def set_evidence(self, evidence: pd.Series):
         '''
@@ -119,6 +121,7 @@ class BNReasoner:
 
                 self.bn.del_var(leaf_node)
                 removed.append(leaf_node)
+                print(f"Removed {leaf_node} from network")
         
         return removed
 
@@ -389,17 +392,13 @@ class BNReasoner:
         order = {}
         cpts = []
         ordering = self.ordering(X, strategy=strategy)
-        print(ordering)
         for var in ordering:
             order[var] = []
             # get all factors that contain the variable
-            for cpt_var in [var] + [n for n in interaction_graph.neighbors(var)]:
+            for cpt_var, cpt in self.find_cpts_for_var(var).items():
                 if cpt_var not in cpts:
                     cpts.append(cpt_var)
-                    order[var].append(self.bn.get_cpt(cpt_var))
-                
-            # remove var node from interaction graph
-            interaction_graph.remove_node(var)
+                    order[var].append(cpt)
         
         # multiply factors in order
         factor = pd.DataFrame({'p': [1]})
@@ -409,12 +408,11 @@ class BNReasoner:
                 factor = self.multiply_factors(factor, cpt)
             # sum out variable
             factor = self.sum_out(factor, var)
-            print(factor)
         
         return factor
 
 
-    def marginal_distributions(self, query: List[str], evidence: pd.Series, strategy: str) -> List[str]:
+    def marginal_distributions(self, query: List[str], evidence: pd.Series, strategy='min-degree') -> List[str]:
         '''
         Given a query and evidence, return the marginal distribution of the query variables.
         Input:
@@ -423,17 +421,25 @@ class BNReasoner:
         Returns:
             marginal_distribution: A dictionary with the query variable names as keys and the corresponding marginal distributions as values.
         '''
-        
-        # prune BN based on evidence (evidence is now automatically set in the pruning function)
+        # prune BN based on evidence
         self.network_pruning(query, evidence)
 
-        # elimate variables not in query
-        marginal = self.var_elimination([var for var in self.bn.get_all_variables() if var not in query], strategy = strategy)
+        # set evidence
+        self.set_evidence(evidence)
 
-        # normalize if evidence is not empty
-        if len(evidence) > 0:
-            marginal['p'] = marginal['p'] / sum(marginal['p'])
+        print("#########################################")
+        for var, cpt in self.bn.get_all_cpts().items():
+            print(var)
+            print(cpt)
 
+        # elimate variables not in query or evidence
+        marginal = self.var_elimination([var for var in self.bn.get_all_variables() if var not in query and var not in evidence], strategy=strategy)
+
+        # if evidence, sum out q to compute posterior marginal
+        if not evidence.empty:
+            # normalize marginal
+            marginal['p'] = marginal['p'] / marginal['p'].sum()
+        
         return marginal
 
 
