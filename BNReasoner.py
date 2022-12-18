@@ -121,7 +121,6 @@ class BNReasoner:
 
                 self.bn.del_var(leaf_node)
                 removed.append(leaf_node)
-                print(f"Removed {leaf_node} from network")
         
         return removed
 
@@ -209,7 +208,7 @@ class BNReasoner:
         """
         cpt = factor
         if X not in cpt.columns:
-            raise ValueError("Variable not in CPT")
+            raise ValueError(f"Variable {X} not in CPT")
 
         all_other_vars = [v for v in cpt.columns if v not in ['p', X]]
 
@@ -230,29 +229,29 @@ class BNReasoner:
             X: string indicating the variable to be maxed out.
         Returns:
             Pandas DataFrame: The CPT maxed out by X. The values for X are given after the "p" column.
-        """
-                    
+        """         
         cpt = factor
         if X not in cpt.columns:
             raise ValueError("Variable not in CPT")
         
-        # get all other vars
-        all_other_vars = [v for v in cpt.columns if v not in ['p', X]]
-
+        # get all other vars up to column p
+        all_other_vars = [v for v in cpt.loc[:, :'p'].columns if v not in ['p', X]]
         # edge case where there are no other variables
         if len(all_other_vars) == 0:
             # return row with max p
-            return cpt[cpt.p == cpt.p.max()]
+            new_cpt = cpt[cpt.p == cpt.p.max()]
+        else:
+            # find max occurrences
+            new_cpt = cpt.groupby(all_other_vars)["p"].max()
         
-        # find max occurrences
-        new_cpt = cpt.groupby(all_other_vars)["p"].max()
-        # merge var with max occurrences back in
-        # this effecively creates an extended factor with the maxed out variable
-        new_cpt = pd.merge(cpt, new_cpt, on="p")
+            # this effecively creates an extended factor with the maxed out variable
+            new_cpt = pd.merge(cpt, new_cpt, on="p", how="inner").drop_duplicates()
         
-        # move maxed out var to back to indicate it is set
+        # move all maxed out vars to back to indicate it is set
         new_cpt = new_cpt[[v for v in new_cpt.columns if v != X] + [X]]
-        
+        # rename X column to X_max
+        new_cpt = new_cpt.rename(columns={X: X + "_max"})
+
         return new_cpt
     
     
@@ -274,8 +273,11 @@ class BNReasoner:
         else:
             new_cpt = pd.merge(f1, f2, on = common_columns, how='outer')
         
-        new_cpt['p'] = new_cpt['p_x'] * new_cpt['p_y']
-        new_cpt.drop(['p_x', 'p_y'], axis=1, inplace=True)
+        new_cpt['p_x'] = new_cpt['p_x'] * new_cpt['p_y']
+
+        # drop temporary columns
+        new_cpt.drop(['p_y'], axis=1, inplace=True)
+        new_cpt.rename(columns={'p_x': 'p'}, inplace=True)
         
         return new_cpt
 
@@ -381,18 +383,20 @@ class BNReasoner:
 
         return added_edges
     
-    def var_elimination(self, X, strategy='min-degree'):
+    def var_elimination(self, X, order_strategy='min-degree', max_out=False):
         '''
         given a set of variables X, eliminate variables in the right order
         optional input: ordering strategy: 'min-degree' or 'min-fill'. Standard: 'min-degree'
         returns: resulting factor
         '''
+        if max_out:
+            reduce = self.max_out
+        else:
+            reduce = self.sum_out
         # set cpts in multiplation order
-        interaction_graph = self.bn.get_interaction_graph()
         order = {}
         cpts = []
-        ordering = self.ordering(X, strategy=strategy)
-        for var in ordering:
+        for var in self.ordering(X, strategy=order_strategy):
             order[var] = []
             # get all factors that contain the variable
             for cpt_var, cpt in self.find_cpts_for_var(var).items():
@@ -400,6 +404,7 @@ class BNReasoner:
                     cpts.append(cpt_var)
                     order[var].append(cpt)
         
+        print(order.keys())
         # multiply factors in order
         factor = pd.DataFrame({'p': [1]})
         for var in order:
@@ -407,14 +412,18 @@ class BNReasoner:
             for cpt in order[var]:
                 factor = self.multiply_factors(factor, cpt)
             # sum out variable
-            print(f"pre sum out:\n{factor}\n")
-            print(f"summing out: {var}")
-            factor = self.sum_out(factor, var)
+            factor = reduce(factor, var)
         
+        # multiply all remaining factors
+        left_overs = [var for var in self.bn.get_all_cpts() if var not in cpts]
+        print(left_overs)
+        for var in left_overs:
+            factor = self.multiply_factors(factor, self.bn.get_cpt(var))
+
         return factor
 
 
-    def marginal_distributions(self, query: List[str], evidence: pd.Series, strategy='min-degree') -> List[str]:
+    def marginal_distributions(self, query: List[str], evidence=pd.Series(), strategy='min-degree', posterior=True) -> pd.DataFrame:
         '''
         Given a query and evidence, return the marginal distribution of the query variables.
         Input:
@@ -423,23 +432,16 @@ class BNReasoner:
         Returns:
             marginal_distribution: A dictionary with the query variable names as keys and the corresponding marginal distributions as values.
         '''
-        # prune BN based on evidence
-        self.network_pruning(query, evidence)
-
         # set evidence
         self.set_evidence(evidence)
 
-        print("#########################################")
-        for var, cpt in self.bn.get_all_cpts().items():
-            print(var)
-            print(cpt)
-
         # elimate variables not in query or evidence
-        marginal = self.var_elimination([var for var in self.bn.get_all_variables() if var not in query and var not in evidence], strategy=strategy)
+        marginal = self.var_elimination([var for var in self.bn.get_all_variables() if var not in query], order_strategy=strategy)
 
         # if evidence, sum out q to compute posterior marginal
-        if not evidence.empty:
+        if posterior:
             # normalize marginal
+            print("Normalizing marginal")
             marginal['p'] = marginal['p'] / marginal['p'].sum()
         
         return marginal
@@ -457,36 +459,21 @@ class BNReasoner:
             instantiation: A dictionary with all variable names as keys and the truth values for which the probability is maximized.
             probability: The probability of the instantiation.
         """
+        # set evidence
+        self.set_evidence(evidence)
         
+        # prune network
         self.network_pruning(self.bn.get_all_variables(), evidence)
 
-        var_list = list(self.bn.get_all_cpts().keys())
-        
-        # Do correct ordering based on all variables
-        order = self.ordering(var_list, strategy=strategy)
-        
-        all_cpts = list(self.bn.get_all_cpts().values())
+        # eliminate all variables by maxing out
+        mpe = self.var_elimination(self.bn.get_all_variables(), strategy, max_out=True)
 
-        for var in order:
-            
-            cpts_per_var, multiplication_factor = self.multiply_cpts_per_var(var, all_cpts)
-            
-            # Delete CPTs of variables that were already summed out, but add the combined and summed out CPT instead
-            relevant_cols = [list(cpt.columns) for cpt in cpts_per_var]
-            all_cpts = [cpt for cpt in all_cpts if list(cpt.columns) not in relevant_cols]
-            
-            # Add summed-out CPT
-            all_cpts.append(multiplication_factor)
-            
-        # Extract that instantiation for which the combined probability is maximized
-        instantiation = multiplication_factor[multiplication_factor["p"] == max(multiplication_factor["p"])][self.bn.get_all_variables()].to_dict('records')[0]
-            
-        return instantiation, max(multiplication_factor["p"])
-    
-    
+        return mpe
+
+
     def map(self, query, evidence, strategy="min-fill"):
         """
-        Given a query and some evidence, return the instantiation that maximizes the marginal distribition P(Q/e) along with the probability.
+        Given a query and some evidence, return the instantiation that maximizes the marginal distribition P(Q|e) along with the probability.
         
         Input:
             query: List of variable names to compute the marginal distribution for, given the evidence.
@@ -496,29 +483,29 @@ class BNReasoner:
             instantiation: A dictionary with all variable names as keys and the truth values for which the probability is maximized.
             probability: The probability of the instantiation.
         """
-        
-        # Compute marginal distribution
-        marginal = self.marginal_distributions(query, evidence, strategy)
+        # Compute joint marginal Pr(Q, e)
+        marginal = self.marginal_distributions(query, evidence, strategy=strategy, posterior=False)
+
+        print(marginal)
         
         # Max out all query variables to get the instantiation for which the probability is maximized
-        instantiation = {}
+        map = marginal
         for var in query:
-            maxed_out = self.max_out(marginal, var)
-            marginal = maxed_out[0] # Store the new marginal distribution
-            instantiation[var] = maxed_out[1] # Store the instantiation for which the probability is maximized
+            map = self.max_out(map, var)
                     
-        return instantiation, maxed_out[0] 
+        return map
 
 
 if __name__ == '__main__':
     # Load the BN from the BIFXML file
     bnr = BNReasoner('testing\lecture_example.BIFXML')
 
-    bnr.bn.draw_structure()
+    query = ["Winter?"]
+    evidence = pd.Series({"Wet Grass?": False})
 
-    query=["Slippery Road?"]
-    evidence=pd.Series({"Rain?": False, "Winter?": True})
+    print(bnr.map(query, evidence, strategy="min-fill"))
 
-    bnr.network_pruning(query, evidence)
+    bnr = BNReasoner('testing\lecture_example.BIFXML')
+    print(bnr.mpe(evidence, strategy="min-fill"))
 
-    bnr.get_interaction_graph()
+

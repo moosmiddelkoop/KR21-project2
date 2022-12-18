@@ -136,5 +136,14 @@ bnr = deepcopy(example_simple)
 print(bnr.var_elimination(["B", "A"]))
 
 # test for marginalisation
+print("################################################")
 bnr = deepcopy(example_simple)
 print(bnr.marginal_distributions(["C"], pd.Series({"A": True})))
+print("################################################")
+
+bnr = deepcopy(example_simple)
+print(bnr.marginal_distributions([], pd.Series({"A": True})))
+
+# test for map
+bnr = deepcopy(example_2_bnr)
+print(bnr.map(["I", "J"], pd.Series({"O": True})))
