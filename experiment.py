@@ -61,39 +61,40 @@ class Experiment:
         return marginal, runtime
 
 
-def experiment(percentage_vars, ordering_strategy, files, runs):
+def experiment(ordering_strategy, files, runs):
 
-    results = []
-    runtimes = []
+    percentage_steps = np.arange(0.1, 1.0, 0.1)
+    runtimes_per_percentage = []
 
-    for file in tqdm(files):
-        for run in range(runs):
+    for i in percentage_steps:
 
-            Experiment1 = Experiment(f'usable/{file}.bifxml')
-            result, runtime = Experiment1.ordering_strategy_experiment(percentage_vars, ordering_strategy)
-            results.append(result)
-            runtimes.append(runtime)
+        runtimes = []
 
-    return results, runtimes
+        for file in tqdm(files):
+            for run in range(runs):
 
+                Experiment1 = Experiment(f'usable/{file}.bifxml')
+                result, runtime = Experiment1.ordering_strategy_experiment(i, ordering_strategy)
+                runtimes.append(runtime)
+        
+        runtimes_per_percentage.append(runtimes)
+
+    return runtimes_per_percentage, percentage_steps
 
 
 
 if __name__ == '__main__':
 
-    # min_fill_resuts, min_fill_runtimes = experiment(0.8, 'min-fill', FILES, 1000)
-    # min_degree_resuts, min_degree_runtimes = experiment(0.8, 'min-degree', FILES, 1000)
-    # print(np.mean(min_fill_runtimes))
-    # print(np.mean(min_degree_runtimes))
+    min_fill_resuts, min_fill_runtimes = experiment('min-fill', FILES, 1000)
+    min_degree_resuts, min_degree_runtimes = experiment('min-degree', FILES, 1000)
+    print(np.mean(min_fill_runtimes, axis=1))
+    print(np.mean(min_degree_runtimes, axis=1))
 
     # print(stats.ttest_ind(min_fill_runtimes, min_degree_runtimes))
 
-    Experiment1 = Experiment('usable/win95pts.bifxml')
     # result, runtime = Experiment1.ordering_strategy_experiment(0.9, 'min-fill') 
     # print(f"This took {runtime*1000} milliseconds")
 
-    marginal, runtime = Experiment1.marginal_distribution_experiment(5, 5, 'min-fill')
-    print(runtime)
-
+   
 
 
