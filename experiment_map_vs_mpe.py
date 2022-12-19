@@ -30,9 +30,11 @@ def experiment(bifxml_file, runs=100):
 
         # map
         bnr = deepcopy(bnr_original)
+        # query is all variables except evidence V\E
+        query = [var for var in vars if var not in evidence.index]
         # time map
         start = time.time()
-        map = bnr.map(vars, evidence)
+        map = bnr.map(query, evidence)
         end = time.time()
         map_time = end - start
 
@@ -41,7 +43,7 @@ def experiment(bifxml_file, runs=100):
 
         # check how many values for map and mep agree
         correct = 0
-        for var in mpe.columns:
+        for var in map.columns:
             # don't compare p-values
             if var == 'p':
                 continue
@@ -50,12 +52,12 @@ def experiment(bifxml_file, runs=100):
                 correct += 1
 
 
-        results.append(correct / (len(mpe.columns) - 1))
+        results.append(correct / (len(map.columns) - 1))
 
     print(f"Fraction correct: {np.mean(results)}")
     print(f"Std: {np.std(results)}")
 
-    return len(vars), np.mean(results), np.std(results), np.mean(times)
+    return len(vars), np.mean(results), np.std(results), np.mean(times), 
 
 
 # loop over all files in the usable folder
@@ -80,3 +82,9 @@ plt.errorbar(nodes, avg, yerr=std, fmt='o')
 plt.show()
 plt.errorbar(nodes, times, fmt='o')
 plt.show()
+
+# averages over evrerything
+print(f"Average fraction correct: {np.mean(avg)}")
+print(f"Average std: {np.mean(std)}")
+print(f"Average times: {np.mean(times)}")
+

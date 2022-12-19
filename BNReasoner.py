@@ -1,12 +1,8 @@
-from typing import List, Tuple, Dict, Union
+from typing import List, Union, Dict
 from networkx import Graph
 
 from BayesNet import BayesNet
 import pandas as pd
-import helper
-
-import networkx as nx
-import matplotlib.pyplot as plt
 
 
 class BNReasoner:
@@ -484,5 +480,3 @@ if __name__ == '__main__':
     evidence = pd.Series({"O": False, "J": True})
     bnr = BNReasoner('testing\lecture_example2.BIFXML')
     print(bnr.mpe(evidence, strategy="min-fill"))
-
-
