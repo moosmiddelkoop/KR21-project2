@@ -404,7 +404,6 @@ class BNReasoner:
                     cpts.append(cpt_var)
                     order[var].append(cpt)
         
-        print(order.keys())
         # multiply factors in order
         factor = pd.DataFrame({'p': [1]})
         for var in order:
@@ -416,7 +415,6 @@ class BNReasoner:
         
         # multiply all remaining factors
         left_overs = [var for var in self.bn.get_all_cpts() if var not in cpts]
-        print(left_overs)
         for var in left_overs:
             factor = self.multiply_factors(factor, self.bn.get_cpt(var))
 
@@ -441,7 +439,6 @@ class BNReasoner:
         # if evidence, sum out q to compute posterior marginal
         if posterior:
             # normalize marginal
-            print("Normalizing marginal")
             marginal['p'] = marginal['p'] / marginal['p'].sum()
         
         return marginal
@@ -485,8 +482,6 @@ class BNReasoner:
         """
         # Compute joint marginal Pr(Q, e)
         marginal = self.marginal_distributions(query, evidence, strategy=strategy, posterior=False)
-
-        print(marginal)
         
         # Max out all query variables to get the instantiation for which the probability is maximized
         map = marginal
