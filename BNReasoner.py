@@ -186,7 +186,9 @@ class BNReasoner:
 
     def indepencence(self, X, Y, Z):    
         '''
-        Given three sets of variables x, y, and z, determine wether x and y are independent given z
+        THIS METHOD ASSUMES THAT THE NETWORK IS FAITHFUL
+        Given three sets of variables x, y, and z, determine wether x and y are independent given z.
+        If the Network is faithful, then x and y are independent given z iff x and y are d-separated given z.
         input:
         x: set of vars
         y: set of vars
@@ -194,7 +196,7 @@ class BNReasoner:
         output: 
         bool
         '''
-        # IS THIS ALL?! #TODO: There is an edge case where odds are fifty fifty, d-seperation would return False even though the var IS indepedent
+        #TODO: There is an edge case where odds are fifty fifty, d-seperation would return False even though the var IS indepedent
         return self.is_d_seperated(X, Y, Z)
 
     def sum_out(self, factor, X):
@@ -280,29 +282,6 @@ class BNReasoner:
         new_cpt.rename(columns={'p_x': 'p'}, inplace=True)
         
         return new_cpt
-
-
-    def multiply_cpts_per_var(self, var, cpt_list):
-        '''
-        Function to multiply all factors that contain a certain variable
-        
-        input: 
-        - var: the variable name as string
-        - cpt_list: list of all factors as CPTs (Pandas Data Frames)
-        returns:
-        - cpts_per_var: list of all factors that contain the variable
-        - multiplication_factor: the multiplication of all factors that contain the variable
-        '''
-        
-        # Extract all cpts that contain the variable
-        cpts_per_var = [cpt for cpt in cpt_list if var in cpt.columns]
-        
-        # get multiplication factor (multiply all factors containing the variable)
-        multiplication_factor = cpts_per_var[0]
-        for j in range(1, len(cpts_per_var)):
-            multiplication_factor = self.multiply_factors(multiplication_factor, cpts_per_var[j])
-        
-        return cpts_per_var, multiplication_factor
 
     def ordering(self, x, strategy=None):
         '''
@@ -404,7 +383,6 @@ class BNReasoner:
                     cpts.append(cpt_var)
                     order[var].append(cpt)
         
-        print(order.keys())
         # multiply factors in order
         factor = pd.DataFrame({'p': [1]})
         for var in order:
@@ -414,14 +392,12 @@ class BNReasoner:
             # sum out variable
             factor = reduce(factor, var)
         
-        # multiply all remaining factors
+        # multiply all remaining factors, missed by the ordering factorisation
         left_overs = [var for var in self.bn.get_all_cpts() if var not in cpts]
-        print(left_overs)
         for var in left_overs:
             factor = self.multiply_factors(factor, self.bn.get_cpt(var))
 
         return factor
-
 
     def marginal_distributions(self, query: List[str], evidence=pd.Series(), strategy='min-degree', posterior=True) -> pd.DataFrame:
         '''
@@ -435,19 +411,20 @@ class BNReasoner:
         # set evidence
         self.set_evidence(evidence)
 
-        # elimate variables not in query or evidence
+        # prune network
+        self.network_pruning(self.bn.get_all_variables(), evidence)
+
+        # elimate variables not in query
         marginal = self.var_elimination([var for var in self.bn.get_all_variables() if var not in query], order_strategy=strategy)
 
         # if evidence, sum out q to compute posterior marginal
         if posterior:
             # normalize marginal
-            print("Normalizing marginal")
             marginal['p'] = marginal['p'] / marginal['p'].sum()
         
         return marginal
 
-
-    def mpe(self, evidence, strategy="min-fill"):
+    def mpe(self, evidence, strategy="min-degree"):
         
         """
         Given some evidence, return the instantiation that is most probable.
@@ -470,8 +447,7 @@ class BNReasoner:
 
         return mpe
 
-
-    def map(self, query, evidence, strategy="min-fill"):
+    def map(self, query, evidence, strategy="min-degree"):
         """
         Given a query and some evidence, return the instantiation that maximizes the marginal distribition P(Q|e) along with the probability.
         
@@ -483,10 +459,10 @@ class BNReasoner:
             instantiation: A dictionary with all variable names as keys and the truth values for which the probability is maximized.
             probability: The probability of the instantiation.
         """
+        # TODO: there is an optimisation possibility here by summing out in order instead of the whole marginal factor at once
+
         # Compute joint marginal Pr(Q, e)
         marginal = self.marginal_distributions(query, evidence, strategy=strategy, posterior=False)
-
-        print(marginal)
         
         # Max out all query variables to get the instantiation for which the probability is maximized
         map = marginal
@@ -498,14 +474,15 @@ class BNReasoner:
 
 if __name__ == '__main__':
     # Load the BN from the BIFXML file
-    bnr = BNReasoner('testing\lecture_example.BIFXML')
+    bnr = BNReasoner('testing\lecture_example2.BIFXML')
 
-    query = ["Winter?"]
-    evidence = pd.Series({"Wet Grass?": False})
+    query = ["I", "J"]
+    evidence = pd.Series({"O": True})
 
     print(bnr.map(query, evidence, strategy="min-fill"))
 
-    bnr = BNReasoner('testing\lecture_example.BIFXML')
+    evidence = pd.Series({"O": False, "J": True})
+    bnr = BNReasoner('testing\lecture_example2.BIFXML')
     print(bnr.mpe(evidence, strategy="min-fill"))
 
 
